@@ -1,6 +1,6 @@
 // V5: cache aset statis saja, bukan halaman privat atau API.
-const CACHE = 'temanchat-v5-static';
-const ASSETS = ['/style.css','/app.js?v=5','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
+const CACHE = 'temanchat-v5-mobile-1';
+const ASSETS = ['/style.css','/app.js?v=5.1','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
   self.skipWaiting();
