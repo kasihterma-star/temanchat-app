@@ -85,8 +85,13 @@ function renderChatList() {
           const result = await post('/api/chat/start', { username:c.other_username });
           $('search').value = ''; searchResults = null;
           await fetchChats();
-          const target = chats.find(x => x.id === result.conversationId);
-          if (target) await selectChat(target);
+          // Buka percakapan meskipun daftar chat belum selesai dimuat ulang.
+          const target = chats.find(x => x.id === result.conversationId) || {
+            id: result.conversationId,
+            other_name: c.other_name,
+            other_username: c.other_username
+          };
+          await selectChat(target);
         } catch (err) { toast(err.message); b.disabled = false; }
       } else await selectChat(c);
     };
@@ -190,8 +195,22 @@ $('settingsBtn').onclick = () => modal('Akun TemanChat', me ? `${me.display_name
   try { await post('/api/auth/logout', {}); location.replace('/auth.html'); }
   catch(err){toast(err.message)}
 }}]);
+// Tombol kembali khusus HP (bukan sekadar simbol CSS yang tidak bisa ditekan).
+const backBtn = document.createElement('button');
+backBtn.type = 'button';
+backBtn.className = 'tc-back';
+backBtn.textContent = '‹';
+backBtn.setAttribute('aria-label', 'Kembali ke daftar percakapan');
+backBtn.addEventListener('click', showList);
+document.querySelector('.chathead').prepend(backBtn);
 document.querySelector('.chathead').addEventListener('click', e => {
-  if (innerWidth <= 740 && (e.target.closest('.chat-person') || e.target === e.currentTarget)) showList();
+  if (innerWidth <= 740 && e.target.closest('.chat-person')) showList();
+});
+window.addEventListener('resize', () => {
+  if (innerWidth > 740) {
+    $('sidebar').classList.remove('mobile-visible');
+    $('conversation').classList.remove('mobile-hidden');
+  } else if (!active) showList();
 });
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; });
 $('installBtn').onclick = async () => {
