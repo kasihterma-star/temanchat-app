@@ -11,7 +11,7 @@ const clean = s => String(s??'').trim();
 const allowOrigin = req => req.headers.get('Origin') === `https://${HOST}`;
 function cookie(req,name){const v=req.headers.get('Cookie')||'';const m=v.match(new RegExp('(?:^|;\\s*)'+name+'=([^;]*)'));return m?m[1]:null}
 function sessionCookie(token,maxAge){return `tc_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`}
-async function passwordHash(password,salt=random(16),rounds=120000){
+async function passwordHash(password,salt=random(16),rounds=100000){
   const key=await crypto.subtle.importKey('raw',TE.encode(password),'PBKDF2',false,['deriveBits']);
   const hash=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:Uint8Array.from(salt.match(/../g).map(x=>parseInt(x,16))),iterations:rounds},key,256);
   return `pbkdf2-sha256$${rounds}$${salt}$${hex(hash)}`;
@@ -19,7 +19,7 @@ async function passwordHash(password,salt=random(16),rounds=120000){
 async function verifyPassword(password,stored){
   const p=String(stored||'').split('$');
   if(p.length!==4||p[0]!=='pbkdf2-sha256'||!/^[0-9a-f]{32}$/.test(p[2])||!/^[0-9a-f]{64}$/.test(p[3]))return false;
-  const rounds=Number(p[1]);if(!Number.isSafeInteger(rounds)||rounds<100000||rounds>500000)return false;
+  const rounds=Number(p[1]);if(!Number.isSafeInteger(rounds)||rounds<100000||rounds>100000)return false;
   const got=(await passwordHash(password,p[2],rounds)).split('$')[3];
   let diff=0;for(let i=0;i<64;i++)diff|=got.charCodeAt(i)^p[3].charCodeAt(i);return diff===0;
 }
