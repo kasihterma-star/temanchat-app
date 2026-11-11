@@ -3,3 +3,16 @@
 .send:disabled{opacity:.45;cursor:not-allowed}
 .compose input:disabled{opacity:.65}
 @media(max-width:740px){.chat-person{cursor:pointer}}
+
+/* Navigasi mobile V5.1 */
+.tc-back{display:none;border:0;background:transparent;color:#236959;font-size:34px;line-height:1;width:32px;height:40px;cursor:pointer;padding:0}
+@media(max-width:740px){
+  .chathead::before{content:none !important}
+  .tc-back{display:block;flex-shrink:0}
+  #app{grid-template-columns:minmax(0,1fr)}
+  .sidebar.mobile-visible{display:flex !important;min-width:0}
+  .sidebar:not(.mobile-visible){display:none !important}
+  .conversation.mobile-hidden{display:none !important}
+  .conversation:not(.mobile-hidden){display:flex !important;min-width:0}
+  .contact{touch-action:manipulation}
+}
