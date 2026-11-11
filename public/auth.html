@@ -4,7 +4,7 @@
 <div class="alert" id="notice" role="status" aria-live="polite" hidden></div>
 <form id="authForm"><div id="registerFields" hidden><label for="displayName">Nama tampilan</label><input id="displayName" maxlength="60" autocomplete="name" placeholder="Nama kamu"><label for="username">Username unik</label><input id="username" maxlength="24" autocomplete="username" placeholder="mis. teman123" pattern="[a-zA-Z0-9_]{3,24}"></div>
 <div id="emailGroup"><label for="email">Alamat email</label><input id="email" type="email" autocomplete="email" maxlength="254" placeholder="nama@gmail.com" required></div>
-<div id="passwordGroup"><label for="password" id="passwordLabel">Password</label><div class="pw"><input id="password" type="password" autocomplete="current-password" placeholder="Minimal 12 karakter" required><button type="button" id="showPassword" aria-label="Tampilkan password">Lihat</button></div></div>
+<div id="passwordGroup"><label for="password" id="passwordLabel">Password</label><div class="pw"><input id="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" placeholder="Minimal 8 karakter" required><button type="button" id="showPassword" aria-label="Tampilkan password">Lihat</button></div></div>
 <div id="turnstile" class="turnstile"></div><button type="submit" id="submitBtn" class="submit" disabled>Menyiapkan keamanan…</button></form>
 <div class="extras"><button type="button" id="forgotBtn">Lupa password?</button><button type="button" id="resendBtn">Kirim ulang verifikasi</button></div>
 <p class="footnote">Chat dan telepon sungguhan masih tahap pengembangan. Akun ini untuk pengujian awal.</p></section></main></body></html>
