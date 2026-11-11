@@ -1,0 +1,5 @@
+/* TemanChat V5: sentuhan kecil tanpa mengubah desain sebelumnya */
+.tc-empty{padding:24px;color:#778d86;font-size:13px;line-height:1.6;text-align:center}
+.send:disabled{opacity:.45;cursor:not-allowed}
+.compose input:disabled{opacity:.65}
+@media(max-width:740px){.chat-person{cursor:pointer}}
