@@ -1,1 +1,18 @@
-{ "name": "temanchat-app", "main": "src/index.js", "compatibility_date": "2026-11-10", "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] } }
+
+{
+  "name": "temanchat-app",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-10",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "temanchat-db",
+      "database_id": "15088769-07bf-4caa-bbc9-293550b5beea"
+    }
+  ]
+}
