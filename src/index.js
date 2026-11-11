@@ -1,4 +1,4 @@
-// TemanChat: auth backend v2. Chat and calls remain demo.
+// TemanChat V5: autentikasi terverifikasi + chat teks 1:1 (D1). Media/panggilan belum aktif.
 const HOST = 'chat.ege.my.id';
 const FROM = 'TemanChat <noreply@temanchat.ege.my.id>';
 const SITE_KEY = '0x4AAAAAAF8MtCXwBz83LC5d';
@@ -174,6 +174,66 @@ export default {
         const t=cookie(request,'tc_session');if(t&&/^[0-9a-f]{64}$/.test(t))await env.DB.prepare('UPDATE sessions SET revoked_at=CURRENT_TIMESTAMP WHERE token_hash=?').bind(await sha(t)).run();
         const r=reply({ok:true});r.headers.set('Set-Cookie',sessionCookie('',0));return r;
       }
+    }
+
+    // V5: API pesan. Selalu memerlukan sesi aktif dan keanggotaan chat.
+    if(path.startsWith('/api/chat/')){
+      const me=await userSession(request,env);
+      if(!me)return reply({error:'Silakan masuk kembali.'},401);
+      if(request.method==='POST'&&!allowOrigin(request))return reply({error:'Origin tidak diizinkan.'},403);
+      if(path==='/api/chat/people'&&request.method==='GET'){
+        const q=clean(url.searchParams.get('q')).toLowerCase();
+        if(!/^[a-z0-9_]{2,24}$/.test(q))return reply({ok:true,people:[]});
+        const found=await env.DB.prepare('SELECT username,display_name FROM users WHERE email_verified=1 AND id!=? AND username LIKE ? ORDER BY username LIMIT 15').bind(me.id,q+'%').all();
+        return reply({ok:true,people:found.results});
+      }
+      if(path==='/api/chat/start'&&request.method==='POST'){
+        let d;try{d=await readJSON(request)}catch{return reply({error:'Permintaan tidak valid'},400)}
+        const uname=clean(d.username).toLowerCase();
+        if(!/^[a-z0-9_]{3,24}$/.test(uname))return reply({error:'Username tidak valid.'},400);
+        if(!await limit(request,env,'chat-start',30))return reply({error:'Terlalu banyak permintaan.'},429);
+        const other=await env.DB.prepare('SELECT id FROM users WHERE username=? AND email_verified=1 LIMIT 1').bind(uname).first();
+        if(!other||other.id===me.id)return reply({error:'Pengguna tidak ditemukan.'},404);
+        const ids=[me.id,other.id].sort(),pair=ids.join(':');
+        await env.DB.prepare('INSERT INTO tc_direct_chats(id,pair_key,user_a,user_b) VALUES(?,?,?,?) ON CONFLICT(pair_key) DO NOTHING').bind(crypto.randomUUID(),pair,ids[0],ids[1]).run();
+        const chat=await env.DB.prepare('SELECT id FROM tc_direct_chats WHERE pair_key=?').bind(pair).first();
+        return reply({ok:true,conversationId:chat.id});
+      }
+      if(path==='/api/chat/conversations'&&request.method==='GET'){
+        const result=await env.DB.prepare(`SELECT c.id, c.created_at,
+          u.username AS other_username,u.display_name AS other_name,
+          (SELECT m.body FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message,
+          (SELECT m.created_at FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_time
+          FROM tc_direct_chats c
+          JOIN users u ON u.id=CASE WHEN c.user_a=? THEN c.user_b ELSE c.user_a END
+          WHERE c.user_a=? OR c.user_b=?
+          ORDER BY COALESCE(last_time,c.created_at) DESC LIMIT 100`).bind(me.id,me.id,me.id).all();
+        return reply({ok:true,conversations:result.results});
+      }
+      if(path==='/api/chat/messages'&&request.method==='GET'){
+        const id=clean(url.searchParams.get('conversationId'));
+        const after=Number(url.searchParams.get('after')||0);
+        if(!/^[0-9a-f-]{36}$/.test(id)||!Number.isSafeInteger(after)||after<0)return reply({error:'Parameter tidak valid.'},400);
+        const access=await env.DB.prepare('SELECT id FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
+        if(!access)return reply({error:'Percakapan tidak ditemukan.'},404);
+        const sql=after>0
+          ? 'SELECT id,sender_id,body,created_at FROM tc_direct_messages WHERE chat_id=? AND id>? ORDER BY id ASC LIMIT 100'
+          : 'SELECT id,sender_id,body,created_at FROM (SELECT id,sender_id,body,created_at FROM tc_direct_messages WHERE chat_id=? ORDER BY id DESC LIMIT 100) ORDER BY id ASC';
+        const statement=env.DB.prepare(sql);
+        const r=after>0?await statement.bind(id,after).all():await statement.bind(id).all();
+        return reply({ok:true,messages:r.results});
+      }
+      if(path==='/api/chat/send'&&request.method==='POST'){
+        let d;try{d=await readJSON(request)}catch{return reply({error:'Permintaan tidak valid'},400)}
+        const id=clean(d.conversationId),body=typeof d.body==='string'?d.body.trim():'';
+        if(!/^[0-9a-f-]{36}$/.test(id)||!body||body.length>1000)return reply({error:'Pesan wajib diisi, maksimal 1000 karakter.'},400);
+        const access=await env.DB.prepare('SELECT id FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
+        if(!access)return reply({error:'Percakapan tidak ditemukan.'},404);
+        if(!await limit(request,env,'chat-send',90))return reply({error:'Terlalu banyak pesan. Coba lagi nanti.'},429);
+        const sent=await env.DB.prepare('INSERT INTO tc_direct_messages(chat_id,sender_id,body) VALUES(?,?,?) RETURNING id,created_at').bind(id,me.id,body).first();
+        return reply({ok:true,message:{id:sent.id,sender_id:me.id,body,created_at:sent.created_at}});
+      }
+      return reply({error:'Endpoint chat tidak ditemukan.'},404);
     }
     if(path.startsWith('/api/'))return reply({error:'Endpoint tidak ditemukan'},404);
     return env.ASSETS.fetch(request);
