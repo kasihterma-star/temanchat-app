@@ -1,1 +1,224 @@
-const contacts=[{id:'nadia',name:'Nadia',initial:'N',tone:'teal',last:'Hai! Apa kabar hari ini?',time:'09.42',messages:[['them','Hai! Apa kabar hari ini?','09.42'],['me','Baik! Ini sedang mencoba aplikasi chat baru 😄','09.43'],['them','Wah, tampilannya bagus!','09.44']]},{id:'rizky',name:'Rizky',initial:'R',tone:'purple',last:'Nanti kita coba video call ya',time:'Kemarin',messages:[['them','Nanti kita coba video call ya','20.15']]},{id:'salsa',name:'Salsa',initial:'S',tone:'orange',last:'Oke, sampai ketemu!',time:'Senin',messages:[['them','Oke, sampai ketemu!','16.12']]}];let selected=contacts[0];const $=id=>document.getElementById(id);let toastTimer;function toast(s){$('toast').textContent=s;$('toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3500)}function renderContacts(){const q=$('search').value.trim().toLowerCase();$('contacts').replaceChildren(...contacts.filter(c=>c.name.toLowerCase().includes(q)).map(c=>{const b=document.createElement('button');b.className='contact'+(c.id===selected.id?' active':'');const a=document.createElement('div');a.className='avatar '+c.tone;a.textContent=c.initial;const content=document.createElement('div');content.className='contact-content';const top=document.createElement('div');top.className='contact-top';const name=document.createElement('b');name.textContent=c.name;const time=document.createElement('small');time.textContent=c.time;top.append(name,time);const p=document.createElement('p');p.textContent=c.last;content.append(top,p);b.append(a,content);b.onclick=()=>{selected=c;renderContacts();renderMessages();$('headName').textContent=c.name;$('headAvatar').textContent=c.initial;$('headAvatar').className='avatar '+c.tone;showChat()};return b}))}function renderMessages(){const container=$('messages');container.replaceChildren();const day=document.createElement('div');day.className='day';day.textContent='Percakapan contoh — hanya tersimpan di halaman ini';container.append(day);for(const [who,message,time] of selected.messages){const b=document.createElement('div');b.className='bubble '+who;const msg=document.createElement('span');msg.textContent=message;const t=document.createElement('time');t.textContent=time;b.append(msg,t);container.append(b)}container.scrollTop=container.scrollHeight}function showChat(){$('sidebar').classList.remove('mobile-visible');$('conversation').classList.remove('mobile-hidden')}function showList(){$('sidebar').classList.add('mobile-visible');$('conversation').classList.add('mobile-hidden')}$('search').oninput=renderContacts;$('messageForm').onsubmit=e=>{e.preventDefault();const i=$('messageInput'),value=i.value.trim();if(!value)return;selected.messages.push(['me',value,new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})]);selected.last=value;selected.time='Sekarang';i.value='';renderMessages();renderContacts();toast('Pesan demo saja — belum terkirim ke orang lain')};function modal(title,desc,content){$('modalTitle').textContent=title;$('modalDesc').textContent=desc;$('modalContent').replaceChildren();if(content)$('modalContent').append(content);$('modal').showModal()}$('closeModal').onclick=()=>$('modal').close();$('voiceBtn').onclick=()=>modal('Telepon suara','Tampilan tombol sudah siap. Panggilan sungguhan akan diaktifkan setelah WebRTC, signaling, dan akun pengguna dibuat.');$('videoBtn').onclick=()=>modal('Video call','Tampilan tombol sudah siap. Video call antarperangkat belum aktif pada versi demo.');$('attachBtn').onclick=()=>toast('Kirim file akan tersedia setelah penyimpanan R2 dihubungkan');$('moreBtn').onclick=()=>modal('Informasi demo','Kontak dan pesan di aplikasi ini adalah contoh. Tidak ada pesan yang dikirim atau disimpan di server.');$('settingsBtn').onclick=()=>showAuth();function showAuth(mode='login'){const div=document.createElement('div');div.innerHTML='<div class="note">Form ini pratinjau. Pendaftaran dan login asli belum diaktifkan agar tidak menyimpan password tanpa sistem keamanan.</div><form id="authForm"><input type="email" autocomplete="email" placeholder="Alamat email" required><input type="password" autocomplete="current-password" placeholder="Kata sandi" minlength="8" required><button class="primary" type="submit">'+(mode==='login'?'Masuk':'Daftar')+'</button></form>';const toggle=document.createElement('button');toggle.className='linkish';toggle.textContent=mode==='login'?'Belum punya akun? Lihat daftar':'Sudah punya akun? Lihat login';toggle.onclick=()=>showAuth(mode==='login'?'register':'login');div.append(toggle);modal(mode==='login'?'Masuk':'Daftar akun','Pratinjau desain autentikasi',div);div.querySelector('form').onsubmit=e=>{e.preventDefault();toast('Mode demo: login/daftar belum aktif')}}let deferredPrompt=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e});$('installBtn').onclick=async()=>{if(window.matchMedia('(display-mode: standalone)').matches){toast('Aplikasi sudah berjalan dalam mode terpasang');return}if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;return}const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);modal('Pasang TemanChat',isIOS?'Di Safari: tekan tombol Bagikan, lalu pilih Tambahkan ke Layar Utama.':'Di Chrome atau Edge: buka menu browser lalu pilih Instal aplikasi / Tambahkan ke layar utama. Jika opsi belum muncul, pastikan situs memakai HTTPS.')};if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));document.querySelector('.chathead').addEventListener('click',e=>{if(innerWidth<=740&&e.target===e.currentTarget)showList()});renderContacts();renderMessages();if(innerWidth<=740)showList();
+'use strict';
+// TemanChat V5: chat teks 1:1, D1 backend. Belum ada media, panggilan, atau E2EE.
+const $ = id => document.getElementById(id);
+let me = null, chats = [], active = null, lastId = 0, searchResults = null;
+let timer = null, busyMessages = false, busyChats = false, notificationTimer;
+let lastListUpdate = 0, searchSeq = 0, installPrompt = null;
+
+function toast(message) {
+  $('toast').textContent = message;
+  $('toast').classList.add('visible');
+  clearTimeout(notificationTimer);
+  notificationTimer = setTimeout(() => $('toast').classList.remove('visible'), 4000);
+}
+async function api(url, options = {}) {
+  let response;
+  try {
+    response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', ...options });
+  } catch { throw Error('Tidak dapat terhubung. Periksa koneksi internet.'); }
+  if (response.status === 401) {
+    location.replace('/auth.html');
+    throw Error('Sesi telah berakhir');
+  }
+  let data;
+  try { data = await response.json(); } catch { throw Error('Respons server tidak valid.'); }
+  if (!response.ok || !data.ok) throw Error(data.error || 'Terjadi kesalahan.');
+  return data;
+}
+function post(path, data) {
+  return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+}
+function smallTime(value) {
+  if (!value) return '';
+  const str = value.replace(' ', 'T');
+  const dt = new Date(str.endsWith('Z') ? str : str + 'Z');
+  return Number.isNaN(dt.getTime()) ? '' : dt.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+}
+function avatar(name) { return (name || '?').trim().charAt(0).toUpperCase(); }
+function dom(tag, className, text) {
+  const n = document.createElement(tag); if (className) n.className = className;
+  if (text !== undefined) n.textContent = text; return n;
+}
+function showChat() {
+  $('sidebar').classList.remove('mobile-visible');
+  $('conversation').classList.remove('mobile-hidden');
+}
+function showList() {
+  $('sidebar').classList.add('mobile-visible');
+  $('conversation').classList.add('mobile-hidden');
+}
+function placeholder(text) {
+  const el = dom('div', 'day', text);
+  $('messages').replaceChildren(el);
+}
+function showHeader(c) {
+  $('headName').textContent = c ? c.other_name : 'Pilih teman';
+  $('headAvatar').textContent = c ? avatar(c.other_name) : '?';
+  $('headAvatar').className = 'avatar teal';
+  document.querySelector('.chat-person small').textContent = c ? '@' + c.other_username : 'Cari pengguna untuk mulai chat';
+  $('messageInput').disabled = !c;
+  document.querySelector('.send').disabled = !c;
+}
+function renderChatList() {
+  const root = $('contacts'); root.replaceChildren();
+  const q = $('search').value.trim().toLowerCase();
+  const list = q.length >= 2 && searchResults !== null
+    ? searchResults.map(p => ({ other_name:p.display_name, other_username:p.username, searchPerson:true }))
+    : chats.filter(c => !q || c.other_name.toLowerCase().includes(q) || c.other_username.includes(q));
+  if (!list.length) {
+    root.append(dom('p', 'tc-empty', q.length >= 2 ? 'Tidak ditemukan. Coba username lain.' : 'Belum ada percakapan. Cari username teman di atas.'));
+    return;
+  }
+  for (const c of list) {
+    const b = dom('button', 'contact' + (!c.searchPerson && active?.id === c.id ? ' active' : ''));
+    b.type = 'button';
+    const a = dom('div', 'avatar teal', avatar(c.other_name));
+    const content = dom('div', 'contact-content');
+    const top = dom('div', 'contact-top');
+    top.append(dom('b', '', c.other_name), dom('small', '', c.searchPerson ? 'Mulai chat' : smallTime(c.last_time)));
+    content.append(top, dom('p', '', c.searchPerson ? '@' + c.other_username : (c.last_message || '@' + c.other_username)));
+    b.append(a, content);
+    b.onclick = async () => {
+      if (c.searchPerson) {
+        try {
+          b.disabled = true;
+          const result = await post('/api/chat/start', { username:c.other_username });
+          $('search').value = ''; searchResults = null;
+          await fetchChats();
+          const target = chats.find(x => x.id === result.conversationId);
+          if (target) await selectChat(target);
+        } catch (err) { toast(err.message); b.disabled = false; }
+      } else await selectChat(c);
+    };
+    root.append(b);
+  }
+}
+async function fetchChats() {
+  if (busyChats || !me) return;
+  busyChats = true;
+  try {
+    const data = await api('/api/chat/conversations');
+    chats = data.conversations;
+    if (active) active = chats.find(c => c.id === active.id) || null;
+    if (active) showHeader(active);
+    if (!$('search').value.trim() || searchResults === null) renderChatList();
+  } catch (err) { toast(err.message); }
+  finally { busyChats = false; }
+}
+function addMessage(m) {
+  if ($('messages').querySelector(`[data-message-id="${m.id}"]`)) return;
+  const b = dom('div', 'bubble ' + (m.sender_id === me.id ? 'me' : 'them'));
+  b.dataset.messageId = String(m.id);
+  const text = dom('span', '', m.body);
+  const time = dom('time', '', smallTime(m.created_at));
+  b.append(text, time);
+  const scroller = $('messages');
+  const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 130;
+  scroller.append(b);
+  lastId = Math.max(lastId, Number(m.id) || 0);
+  if (nearBottom) scroller.scrollTop = scroller.scrollHeight;
+}
+async function fetchMessages(reset = false) {
+  if (!active || busyMessages) return;
+  const chatId = active.id;
+  busyMessages = true;
+  try {
+    const after = reset ? 0 : lastId;
+    const data = await api(`/api/chat/messages?conversationId=${encodeURIComponent(chatId)}&after=${after}`);
+    if (!active || active.id !== chatId) return;
+    if (reset) {
+      $('messages').replaceChildren(); lastId = 0;
+      if (!data.messages.length) placeholder('Belum ada pesan. Mulai percakapan!');
+    }
+    if (data.messages.length && $('messages').querySelector('.day')) $('messages').replaceChildren();
+    for (const m of data.messages) addMessage(m);
+  } catch (err) { toast(err.message); }
+  finally { busyMessages = false; }
+}
+async function selectChat(chat) {
+  active = chat; lastId = 0;
+  showHeader(chat); renderChatList();
+  placeholder('Memuat pesan...'); showChat();
+  await fetchMessages(true);
+}
+$('search').addEventListener('input', async () => {
+  const q = $('search').value.trim().toLowerCase();
+  const seq = ++searchSeq;
+  searchResults = null;
+  if (q.length < 2) { renderChatList(); return; }
+  try {
+    const data = await api('/api/chat/people?q=' + encodeURIComponent(q));
+    if (seq !== searchSeq) return;
+    searchResults = data.people;
+    renderChatList();
+  } catch (err) { if (seq === searchSeq) toast(err.message); }
+});
+$('messageForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = $('messageInput');
+  const text = input.value.trim();
+  if (!active || !text || text.length > 1000) return;
+  const chatId = active.id;
+  input.disabled = true;
+  try {
+    const d = await post('/api/chat/send', { conversationId:chatId, body:text });
+    if (active?.id === chatId) {
+      input.value = '';
+      if ($('messages').querySelector('.day')) $('messages').replaceChildren();
+      addMessage(d.message);
+    }
+    await fetchChats();
+  } catch (err) { toast(err.message); }
+  finally { input.disabled = !active; if (active) input.focus(); }
+});
+function modal(title, message, buttons = []) {
+  $('modalTitle').textContent = title;
+  $('modalDesc').textContent = message;
+  const content = $('modalContent'); content.replaceChildren();
+  for (const { text, click } of buttons) {
+    const b = dom('button', 'primary', text);
+    b.onclick = click; content.append(b);
+  }
+  $('modal').showModal();
+}
+$('closeModal').onclick = () => $('modal').close();
+$('voiceBtn').onclick = () => modal('Telepon suara', 'Fitur panggilan akan ditambahkan setelah chat teks stabil.');
+$('videoBtn').onclick = () => modal('Video call', 'Video call belum tersedia pada TemanChat V5.');
+$('attachBtn').onclick = () => toast('Pengiriman foto dan file akan hadir di tahap berikutnya.');
+$('moreBtn').onclick = () => modal('Informasi percakapan', active ? 'Percakapan pribadi dengan @' + active.other_username + '. Pesan tersimpan di D1, belum terenkripsi ujung-ke-ujung.' : 'Pilih teman terlebih dahulu.');
+$('settingsBtn').onclick = () => modal('Akun TemanChat', me ? `${me.display_name} (@${me.username})` : '', [{text:'Keluar dari akun',click: async () => {
+  try { await post('/api/auth/logout', {}); location.replace('/auth.html'); }
+  catch(err){toast(err.message)}
+}}]);
+document.querySelector('.chathead').addEventListener('click', e => {
+  if (innerWidth <= 740 && (e.target.closest('.chat-person') || e.target === e.currentTarget)) showList();
+});
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; });
+$('installBtn').onclick = async () => {
+  if (window.matchMedia('(display-mode: standalone)').matches) return toast('TemanChat sudah terpasang.');
+  if (installPrompt) { installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; return; }
+  modal('Pasang TemanChat', /iPad|iPhone|iPod/.test(navigator.userAgent)
+    ? 'Di Safari: Bagikan → Tambahkan ke Layar Utama.'
+    : 'Di menu browser pilih Instal aplikasi atau Tambahkan ke layar utama.');
+};
+async function init() {
+  showHeader(null); placeholder('Masuk untuk memulai...');
+  if (innerWidth <= 740) showList();
+  try {
+    const data = await api('/api/auth/me');
+    me = data.user;
+    document.querySelector('.profile b').textContent = me.display_name;
+    document.querySelector('.profile small').textContent = '@' + me.username;
+    document.querySelector('.profile .avatar').textContent = avatar(me.display_name);
+    document.documentElement.classList.add('tc-auth-ready');
+    $('mode').innerHTML = '<span class="dot"></span> Pesan teks aktif · V5';
+    placeholder('Cari username teman untuk memulai percakapan.');
+    await fetchChats();
+    timer = setInterval(async () => {
+      if (document.hidden) return;
+      if (active) await fetchMessages();
+      if (Date.now() - lastListUpdate > 8000) { lastListUpdate = Date.now(); await fetchChats(); }
+    }, 4000);
+  } catch (err) { if (err.message !== 'Sesi telah berakhir') location.replace('/auth.html?error=network'); }
+}
+init();
