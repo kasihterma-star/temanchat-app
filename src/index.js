@@ -76,6 +76,21 @@ export default {
       const rows=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
       return reply({ok:true,app:'TemanChat',phase:'auth-v2',database:'connected',tables:rows.results.map(x=>x.name)});
     }
+    if(path==='/api/auth/schema-check'&&request.method==='GET'){
+      const tests={
+        users:['id','username','email','password_hash','display_name','email_verified','updated_at'],
+        sessions:['id','user_id','token_hash','device_name','expires_at','revoked_at'],
+        auth_tokens:['id','user_id','token_hash','purpose','expires_at','used_at'],
+        auth_rate_limits:['key','attempts','created_at']
+      };
+      const checks={};
+      for(const [table,columns] of Object.entries(tests)){
+        const result=await env.DB.prepare(`PRAGMA table_info(${table})`).all();
+        const actual=new Set(result.results.map(r=>r.name));
+        checks[table]={ready:columns.every(c=>actual.has(c)),missing:columns.filter(c=>!actual.has(c))};
+      }
+      return reply({ok:Object.values(checks).every(c=>c.ready),checks});
+    }
     if(path==='/api/auth/config'&&request.method==='GET')return reply({siteKey:SITE_KEY,authReady:Boolean(env.DB&&env.RESEND_API_KEY&&env.TURNSTILE_SECRET_KEY)});
     if(path==='/api/auth/me'&&request.method==='GET'){
       const u=await userSession(request,env);return u?reply({ok:true,user:publicUser(u)}):reply({ok:false},401);
@@ -92,7 +107,7 @@ export default {
       if(path==='/api/auth/register'){
         if(!await limit(request,env,'register',5))return reply({error:'Terlalu banyak percobaan. Coba lagi nanti.'},429);
         const email=clean(d.email).toLowerCase(),username=clean(d.username).toLowerCase(),name=clean(d.displayName),password=d.password;
-        if(!EMAIL.test(email)||email.length>254||!/^[a-z0-9_]{3,24}$/.test(username)||name.length<2||name.length>60||typeof password!=='string'||password.length<12||password.length>128)return reply({error:'Periksa nama, email, username, dan password (minimal 12 karakter).'},400);
+        if(!EMAIL.test(email)||email.length>254||!/^[a-z0-9_]{3,24}$/.test(username)||name.length<2||name.length>60||typeof password!=='string'||password.length<8||password.length>128)return reply({error:'Periksa nama, email, username, dan password (minimal 8 karakter).'},400);
         if(!await turnstile(d.turnstileToken,env))return reply({error:'Verifikasi keamanan gagal. Coba ulangi.'},403);
         const existing=await env.DB.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE OR username=? LIMIT 1').bind(email,username).first();
         if(existing)return reply({error:'Email atau username sudah digunakan.'},409);
@@ -141,7 +156,7 @@ export default {
       if(path==='/api/auth/reset'){
         if(!await limit(request,env,'reset',5))return reply({error:'Terlalu banyak percobaan.'},429);
         if(!await turnstile(d.turnstileToken,env))return reply({error:'Verifikasi keamanan gagal.'},403);
-        if(typeof d.password!=='string'||d.password.length<12||d.password.length>128)return reply({error:'Password baru minimal 12 karakter.'},400);
+        if(typeof d.password!=='string'||d.password.length<8||d.password.length>128)return reply({error:'Password baru minimal 8 karakter.'},400);
         // Check token before expensive hashing; single-use enforced at consumption.
         const raw=d.token;if(typeof raw!=='string'||!/^[a-f0-9]{64}$/.test(raw))return reply({error:'Tautan reset tidak valid.'},400);
         const th=await sha(raw);
@@ -162,6 +177,10 @@ export default {
     }
     if(path.startsWith('/api/'))return reply({error:'Endpoint tidak ditemukan'},404);
     return env.ASSETS.fetch(request);
-  }catch(err){console.error('TemanChat internal error',err?.name||'Error');return reply({error:'Terjadi masalah server.'},500)}
+  }catch(err){
+    const errorId=crypto.randomUUID();
+    console.error('TemanChat internal error', {errorId, path, name:err?.name, message:err?.message, stack:err?.stack});
+    return reply({error:'Terjadi masalah server.',errorId},500);
+  }
  }
 };
