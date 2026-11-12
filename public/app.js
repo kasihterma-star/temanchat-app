@@ -5,6 +5,15 @@ const TCS = window.TCStorage;
 let me=null,chats=[],active=null,lastId=0,searchResults=null,searchSeq=0;
 let pollTimer=null,busyMessages=false,busyChats=false,lastListUpdate=0,toastTimer,installPrompt=null;
 let mediaEnabled=false,currentCall=null,checkingCalls=false,callBusy=false;
+// Notifikasi browser best-effort saat JavaScript berjalan; BUKAN Web Push saat PWA ditutup.
+let notificationBaselineReady=false;
+const seenChatLast=new Map();
+function notifySupported(){return 'Notification' in window&&window.isSecureContext}
+function notifyLocal(title,body,tag){
+ if(!notifySupported()||Notification.permission!=='granted')return;
+ try{const n=new Notification(title,{body,tag,icon:'/icons/icon-192.png'});n.onclick=()=>{window.focus();n.close()}}catch(e){console.warn('Local notification',e)}
+}
+
 const UUID=/^[0-9a-f-]{36}$/;
 function element(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
 function toast(message){const t=$('toast');t.textContent=message;t.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('visible'),4100);}
@@ -54,6 +63,18 @@ async function fetchChats(){
  if(busyChats||!me)return;busyChats=true;
  try{
   const d=await api('/api/chat/conversations');chats=d.conversations||[];
+  // Setelah daftar awal dimuat, beri tahu hanya pesan baru dari teman.
+  for(const c of chats){
+   const previous=seenChatLast.get(c.id);
+   const current=String(c.last_time||'')+'|'+String(c.last_message||'');
+   if(notificationBaselineReady&&previous!==undefined&&previous!==current&&c.last_message&&
+      (document.hidden||active?.id!==c.id)){
+     notifyLocal('Pesan dari '+(c.other_name||'teman'),String(c.last_message).slice(0,120),'chat-'+c.id);
+   }
+   seenChatLast.set(c.id,current);
+  }
+  notificationBaselineReady=true;
+
   if(active){const now=chats.find(c=>c.id===active.id);if(now)active=now;}
   if(!$('search').value.trim()||searchResults===null)renderChats();
  }catch(e){toast(e.message)}finally{busyChats=false}
@@ -163,6 +184,15 @@ $('settingsBtn').onclick=()=>{
  wrap.append(label,select,element('small','Foto dikirim dari perangkat, bukan dipilih dari Google Drive. Cache cloud dibersihkan 3 hari setelah backup berhasil; mode lokal tidak ikut dibersihkan otomatis.'));
  if(!TCS.getClientId())wrap.append(element('small','','Integrasi Google Drive belum dikonfigurasi. Sampai disiapkan, gunakan Lokal.'));
  else {const connect=element('button','primary','Hubungkan Google Drive');connect.onclick=async()=>{try{await TCS.connectGoogle();toast('Google Drive terhubung untuk sesi browser ini.')}catch(e){toast(e.message)}};wrap.append(connect)}
+ const notifyButton=element('button','primary',
+  notifySupported()&&Notification.permission==='granted'?'Notifikasi browser aktif ✓':'Aktifkan notifikasi browser');
+ notifyButton.onclick=async()=>{
+  if(!notifySupported())return toast('Notifikasi browser tidak tersedia. Untuk iPhone, pasang PWA dari Safari.');
+  try{const permission=await Notification.requestPermission();notifyButton.textContent=permission==='granted'?'Notifikasi browser aktif ✓':'Izin notifikasi belum diberikan';
+   toast(permission==='granted'?'Notifikasi browser diaktifkan selama aplikasi berjalan.':'Izin notifikasi belum diberikan.');}
+  catch(e){toast('Tidak dapat meminta izin notifikasi: '+e.message)}
+ };
+ wrap.append(notifyButton,element('small','','Notifikasi ini hanya best-effort selama halaman/PWA berjalan. Agar panggilan dan pesan masuk ketika aplikasi ditutup, dibutuhkan Web Push dan pengaturan khusus iPhone.'));
  const install=element('button','primary','Instal TemanChat');install.onclick=()=>{$('modal').close();$('installBtn').click()};wrap.append(install);
  const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{try{await post('/api/auth/logout',{});location.replace('/auth.html')}catch(e){toast(e.message)}};wrap.append(logout);root.append(wrap);
 };
@@ -260,11 +290,12 @@ $('acceptCall').onclick=async()=>{
 };
 async function checkIncoming(){
  if(checkingCalls||currentCall||document.hidden||!me)return;checkingCalls=true;
- try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true);}}
+ try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true);notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id);}}
  catch(e){console.warn('Incoming call',e.message)}finally{checkingCalls=false}
 }
 async function tick(){
- if(document.hidden||!me)return;
+ if(!me)return;
+ if(document.hidden){if(Date.now()-lastListUpdate>8000){lastListUpdate=Date.now();await fetchChats();}return;}
  if(currentCall)await pollCall();else await checkIncoming();
  if(active)await fetchMessages();
  if(Date.now()-lastListUpdate>8000){lastListUpdate=Date.now();await fetchChats()}

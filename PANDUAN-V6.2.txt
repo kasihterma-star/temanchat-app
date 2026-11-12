@@ -1,0 +1,15 @@
+TemanChat V6.2 — Perbaikan zoom iPhone & notifikasi saat aplikasi berjalan
+
+1. Ekstrak ZIP dan salin isi folder ke Documents\GitHub\temanchat-app. Pilih Replace.
+2. GitHub Desktop: Commit "Fix iPhone zoom and foreground notifications V6.2" lalu Push origin.
+3. Pastikan Cloudflare deployment Ready. Buka ulang PWA di iPhone.
+4. Uji kolom pesan dan keyboard; jangan gunakan pinch-zoom untuk mereset.
+5. Pengaturan TemanChat -> Aktifkan notifikasi browser (jika browser mendukung).
+
+BATASAN:
+- Ini bukan Web Push. Ketika aplikasi benar-benar ditutup, notifikasi pesan dan panggilan belum dijamin.
+- Di iOS, Web Push membutuhkan PWA ditambahkan ke Home Screen, izin notifikasi, push subscription, VAPID,
+  penyimpanan subscription, dan pemicu push server saat pesan/panggilan datang.
+- Foto/file masih menunggu Cloudflare R2 bucket 'temanchat-media' dan binding MEDIA.
+- Jangan mengganti wrangler.jsonc dengan file contoh sampai bucket tersedia.
+- Jangan menambahkan R2 access key ke kode atau GitHub.
