@@ -1,0 +1,22 @@
+TEMANCHAT V6 TERPADU — CARA TERMUDAH (SATU KALI UPDATE)
+=====================================================
+
+1. BACKUP repository TemanChat lama terlebih dahulu.
+2. Dengan GitHub Desktop (disarankan): clone repository kasihterma-star/temanchat-app.
+3. Ekstrak ZIP ini dan COPY SEMUA ISINYA ke folder repository hasil clone.
+   Biarkan struktur folder src/ dan public/ tetap sama; izinkan Replace file lama.
+4. GitHub Desktop → Commit to main → Push origin. Satu commit saja.
+5. Cloudflare → temanchat-app → Deployments → tunggu status Ready.
+6. Uji chat.ege.my.id memakai HP & PC. Login dan pesan teks sudah dihubungkan
+   dengan database D1 lama. TIDAK perlu buat tabel D1 manual lagi untuk V6.
+
+PENTING:
+- Secret TURNSTILE_SECRET_KEY dan RESEND_API_KEY tetap di Cloudflare.
+- Default tanpa R2: chat teks bekerja; unggah foto masih nonaktif.
+- Untuk mengaktifkan foto, buat bucket temanchat-media dulu, lalu gunakan
+  isi file wrangler-media-ready.jsonc sebagai wrangler.jsonc di GitHub.
+- Google Drive: masih perlu Google OAuth Client ID, ada di public/config.js.
+- Panggilan audio/video masih eksperimental tanpa TURN dan notifikasi push.
+- Jangan mengunggah file ZIP utuh sebagai kode aplikasi; ekstrak dahulu.
+
+Panduan lengkap: README.md

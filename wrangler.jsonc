@@ -1,4 +1,3 @@
-
 {
   "name": "temanchat-app",
   "main": "src/index.js",
@@ -14,5 +13,12 @@
       "database_name": "temanchat-db",
       "database_id": "15088769-07bf-4caa-bbc9-293550b5beea"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 2 * * *"]
+  }
+  // Setelah membuat bucket 'temanchat-media', AKTIFKAN blok berikut (hapus //):
+  // ,"r2_buckets": [
+  //   { "binding": "MEDIA", "bucket_name": "temanchat-media" }
+  // ]
 }

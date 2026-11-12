@@ -1,1 +1,12 @@
-{"name":"temanchat-app","version":"0.1.0","private":true,"scripts":{"dev":"wrangler dev","deploy":"wrangler deploy"},"devDependencies":{"wrangler":"^4.0.0"}}
+{
+  "name": "temanchat-app",
+  "version": "6.0.0-beta",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "node --check src/index.js && node --check src/extras.js && node --check public/app.js && node --check public/storage.js && node --check public/auth.js && node tests/check.mjs"
+  },
+  "devDependencies": { "wrangler": "^4.0.0" }
+}

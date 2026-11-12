@@ -1,4 +1,5 @@
-// TemanChat V5: autentikasi terverifikasi + chat teks 1:1 (D1). Media/panggilan belum aktif.
+// TemanChat V6 terpadu: login, chat, media R2 opsional, sinyal WebRTC.
+import { ensureExtras, handleExtra, cleanup } from './extras.js';
 const HOST = 'chat.ege.my.id';
 const FROM = 'TemanChat <noreply@temanchat.ege.my.id>';
 const SITE_KEY = '0x4AAAAAAF8MtCXwBz83LC5d';
@@ -23,10 +24,10 @@ async function verifyPassword(password,stored){
   const got=(await passwordHash(password,p[2],rounds)).split('$')[3];
   let diff=0;for(let i=0;i<64;i++)diff|=got.charCodeAt(i)^p[3].charCodeAt(i);return diff===0;
 }
-async function readJSON(req){
+async function readJSON(req,max=12000){
   if(!req.headers.get('content-type')?.toLowerCase().includes('application/json'))throw Error('format');
-  if(Number(req.headers.get('content-length')||0)>12000)throw Error('size');
-  const raw=await req.text();if(raw.length>12000)throw Error('size');
+  if(Number(req.headers.get('content-length')||0)>max)throw Error('size');
+  const raw=await req.text();if(raw.length>max)throw Error('size');
   const body=JSON.parse(raw);if(!body||typeof body!=='object'||Array.isArray(body))throw Error('format');return body;
 }
 async function limit(req,env,action,max,identity=''){
@@ -74,7 +75,7 @@ export default {
   try {
     if(path==='/api/health'&&request.method==='GET'){
       const rows=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
-      return reply({ok:true,app:'TemanChat',phase:'auth-v2',database:'connected',tables:rows.results.map(x=>x.name)});
+      return reply({ok:true,app:'TemanChat',phase:'v6-integrated',database:'connected',tables:rows.results.map(x=>x.name)});
     }
     if(path==='/api/auth/schema-check'&&request.method==='GET'){
       const tests={
@@ -91,6 +92,7 @@ export default {
       }
       return reply({ok:Object.values(checks).every(c=>c.ready),checks});
     }
+    if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'6.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:false});
     if(path==='/api/auth/config'&&request.method==='GET')return reply({siteKey:SITE_KEY,authReady:Boolean(env.DB&&env.RESEND_API_KEY&&env.TURNSTILE_SECRET_KEY)});
     if(path==='/api/auth/me'&&request.method==='GET'){
       const u=await userSession(request,env);return u?reply({ok:true,user:publicUser(u)}):reply({ok:false},401);
@@ -216,9 +218,15 @@ export default {
         if(!/^[0-9a-f-]{36}$/.test(id)||!Number.isSafeInteger(after)||after<0)return reply({error:'Parameter tidak valid.'},400);
         const access=await env.DB.prepare('SELECT id FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
         if(!access)return reply({error:'Percakapan tidak ditemukan.'},404);
+        let mediaSchemaReady=true;
+        try { await ensureExtras(env); }
+        catch(e) { mediaSchemaReady=false; console.error('Schema media unavailable, serving text-only',e?.message); }
+        const projection=mediaSchemaReady
+          ? 'SELECT m.id,m.sender_id,m.body,m.created_at,l.media_id,f.mime_type FROM tc_direct_messages m LEFT JOIN tc_media_links l ON l.message_id=m.id LEFT JOIN tc_media_items f ON f.id=l.media_id'
+          : 'SELECT m.id,m.sender_id,m.body,m.created_at FROM tc_direct_messages m';
         const sql=after>0
-          ? 'SELECT id,sender_id,body,created_at FROM tc_direct_messages WHERE chat_id=? AND id>? ORDER BY id ASC LIMIT 100'
-          : 'SELECT id,sender_id,body,created_at FROM (SELECT id,sender_id,body,created_at FROM tc_direct_messages WHERE chat_id=? ORDER BY id DESC LIMIT 100) ORDER BY id ASC';
+          ? projection+' WHERE m.chat_id=? AND m.id>? ORDER BY m.id ASC LIMIT 100'
+          : projection+' WHERE m.id IN (SELECT id FROM tc_direct_messages WHERE chat_id=? ORDER BY id DESC LIMIT 100) ORDER BY m.id ASC';
         const statement=env.DB.prepare(sql);
         const r=after>0?await statement.bind(id,after).all():await statement.bind(id).all();
         return reply({ok:true,messages:r.results});
@@ -230,10 +238,19 @@ export default {
         const access=await env.DB.prepare('SELECT id FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
         if(!access)return reply({error:'Percakapan tidak ditemukan.'},404);
         if(!await limit(request,env,'chat-send',90))return reply({error:'Terlalu banyak pesan. Coba lagi nanti.'},429);
+        // Boleh bercanda dengan pesan sama, tetapi jangan mengulang berlebihan.
+        const repeatKey=await sha('repeat|'+me.id+'|'+id+'|'+Math.floor(Date.now()/10000)+'|'+body.toLowerCase()+'|'+env.TURNSTILE_SECRET_KEY);
+        const repeats=await env.DB.prepare('INSERT INTO auth_rate_limits(key,attempts,created_at) VALUES(?,1,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(repeatKey).first();
+        if(Number(repeats?.attempts)>10)return reply({error:'Pesan yang sama terlalu sering. Coba lagi dalam beberapa detik.'},429);
         const sent=await env.DB.prepare('INSERT INTO tc_direct_messages(chat_id,sender_id,body) VALUES(?,?,?) RETURNING id,created_at').bind(id,me.id,body).first();
         return reply({ok:true,message:{id:sent.id,sender_id:me.id,body,created_at:sent.created_at}});
       }
       return reply({error:'Endpoint chat tidak ditemukan.'},404);
+    }
+    if(path.startsWith('/api/media/')||path.startsWith('/api/calls/')) {
+      const me=await userSession(request,env);
+      const extra=await handleExtra(request,env,me,{readJSON,limit,allowOrigin});
+      if(extra)return extra;
     }
     if(path.startsWith('/api/'))return reply({error:'Endpoint tidak ditemukan'},404);
     return env.ASSETS.fetch(request);
@@ -242,5 +259,6 @@ export default {
     console.error('TemanChat internal error', {errorId, path, name:err?.name, message:err?.message, stack:err?.stack});
     return reply({error:'Terjadi masalah server.',errorId},500);
   }
- }
+ },
+ async scheduled(_event,env,ctx){ctx.waitUntil(cleanup(env));}
 };

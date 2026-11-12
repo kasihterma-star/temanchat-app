@@ -1,20 +1,18 @@
-// V5: cache aset statis saja, bukan halaman privat atau API.
-const CACHE = 'temanchat-v5-mobile-1';
-const ASSETS = ['/style.css','/app.js?v=5.1','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
-  self.skipWaiting();
+// V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
+const CACHE='temanchat-v6-static';
+const ASSETS=['/style.css?v=6.0','/v6.css?v=6.0','/app.js?v=6.0','/storage.js?v=6.0','/config.js?v=6.0','/auth.css?v=6.0','/auth.js?v=6.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
+self.addEventListener('install',event=>{
+ event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
-  self.clients.claim();
+self.addEventListener('activate',event=>{
+ event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('temanchat-')&&k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();
 });
-self.addEventListener('fetch', e => {
-  const req=e.request, url=new URL(req.url);
-  if(req.method!=='GET'||url.origin!==self.location.origin)return;
-  if(url.pathname.startsWith('/api/')||url.pathname==='/'||url.pathname.endsWith('.html'))return;
-  e.respondWith(fetch(req).then(r => {
-    if(r.ok){const copy=r.clone();e.waitUntil(caches.open(CACHE).then(c=>c.put(req,copy)));}
-    return r;
-  }).catch(()=>caches.match(req)));
+self.addEventListener('fetch',event=>{
+ const request=event.request,url=new URL(request.url);
+ if(request.method!=='GET'||url.origin!==location.origin)return;
+ if(url.pathname.startsWith('/api/')||url.pathname==='/'||url.pathname.endsWith('.html'))return;
+ event.respondWith(fetch(request).then(r=>{
+  if(r.ok&&r.type==='basic'){const copy=r.clone();event.waitUntil(caches.open(CACHE).then(c=>c.put(request,copy)));}
+  return r;
+ }).catch(()=>caches.match(request)));
 });

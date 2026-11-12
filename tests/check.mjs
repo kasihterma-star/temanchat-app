@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const base=new URL('../',import.meta.url);
+const read=f=>fs.readFileSync(new URL(f,base),'utf8');
+const html=read('public/index.html');
+const js=read('public/app.js');
+const authHtml=read('public/auth.html');
+const authJs=read('public/auth.js');
+const ids=new Set([...html.matchAll(/\bid="([a-zA-Z][\w-]*)"/g)].map(m=>m[1]));
+const authIds=new Set([...authHtml.matchAll(/\bid="([a-zA-Z][\w-]*)"/g)].map(m=>m[1]));
+for(const m of js.matchAll(/\$\('([\w-]+)'\)/g))assert(ids.has(m[1]),`Elemen #${m[1]} tidak ada dalam index.html`);
+for(const m of authJs.matchAll(/\$\('([\w-]+)'\)/g))assert(authIds.has(m[1]) || m[1]==='registerSuccess',`Elemen #${m[1]} tidak ada dalam auth.html`);
+for(const path of ['public/style.css','public/v6.css','public/sw.js','public/storage.js','public/config.js','public/manifest.webmanifest','public/icons/icon-192.png','public/icons/icon-512.png','src/extras.js','wrangler.jsonc'])assert(fs.existsSync(new URL(path,base)),`Missing ${path}`);
+assert(js.includes("$('conversation').classList"),'Fix classList harus mengacu ID conversation');
+assert(html.includes('id="conversation"'),'HTML harus mempunyai id conversation');
+assert(html.includes('id="sidebar"'),'HTML harus mempunyai id sidebar');
+assert(!html.includes('visibility:hidden'),'Tidak boleh sembunyikan seluruh chat tanpa fallback');
+console.log('PASS: semua ID, berkas frontend, dan kontrak mobile cocok.');
