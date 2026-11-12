@@ -60,6 +60,33 @@ async function userSession(req,env){
   return env.DB.prepare('SELECT u.id,u.username,u.email,u.display_name,u.email_verified FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>datetime(\'now\') AND u.email_verified=1 LIMIT 1').bind(await sha(token)).first();
 }
 const publicUser=u=>({id:u.id,username:u.username,email:u.email,display_name:u.display_name,email_verified:u.email_verified});
+// Watermark pesan per pengguna: delivered saat perangkat terhubung dan mengambil daftar,
+// read hanya setelah percakapan terbuka dan terlihat. Tidak mengklaim diterima saat app offline.
+let receiptSchema;
+async function ensureReceiptSchema(env){
+  if(!receiptSchema) receiptSchema=env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_chat_receipts (
+    chat_id TEXT NOT NULL, user_id TEXT NOT NULL,
+    delivered_id INTEGER NOT NULL DEFAULT 0, read_id INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(chat_id,user_id),
+    FOREIGN KEY(chat_id) REFERENCES tc_direct_chats(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`).run().catch(e=>{receiptSchema=null;throw e});
+  return receiptSchema;
+}
+async function deliveredWhileOnline(env,userId,chatId=null){
+  await ensureReceiptSchema(env);
+  const where=chatId?'(c.user_a=? OR c.user_b=?) AND c.id=?':'(c.user_a=? OR c.user_b=?)';
+  const values=chatId?[userId,userId,userId,userId,chatId,userId]:[userId,userId,userId,userId,userId];
+  await env.DB.prepare(`INSERT INTO tc_chat_receipts(chat_id,user_id,delivered_id)
+    SELECT c.id,?, COALESCE((SELECT MAX(m.id) FROM tc_direct_messages m
+      WHERE m.chat_id=c.id AND m.sender_id<>?),0)
+    FROM tc_direct_chats c WHERE ${where}
+    AND EXISTS(SELECT 1 FROM tc_direct_messages m WHERE m.chat_id=c.id AND m.sender_id<>?)
+    ON CONFLICT(chat_id,user_id) DO UPDATE SET
+      delivered_id=MAX(tc_chat_receipts.delivered_id,excluded.delivered_id),
+      updated_at=CURRENT_TIMESTAMP`).bind(...values).run();
+}
 const EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 async function consumeToken(env,raw,purpose){
   if(typeof raw!=='string'||!/^[0-9a-f]{64}$/.test(raw))return null;
@@ -202,10 +229,13 @@ export default {
         return reply({ok:true,conversationId:chat.id});
       }
       if(path==='/api/chat/conversations'&&request.method==='GET'){
+        await deliveredWhileOnline(env,me.id);
         const result=await env.DB.prepare(`SELECT c.id, c.created_at,
           u.username AS other_username,u.display_name AS other_name,
           (SELECT m.body FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message,
-          (SELECT m.created_at FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_time
+          (SELECT m.created_at FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_time,
+          (SELECT m.sender_id FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_sender_id,
+          (SELECT m.id FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message_id
           FROM tc_direct_chats c
           JOIN users u ON u.id=CASE WHEN c.user_a=? THEN c.user_b ELSE c.user_a END
           WHERE c.user_a=? OR c.user_b=?
@@ -213,11 +243,15 @@ export default {
         return reply({ok:true,conversations:result.results});
       }
       if(path==='/api/chat/messages'&&request.method==='GET'){
+        await ensureReceiptSchema(env);
         const id=clean(url.searchParams.get('conversationId'));
         const after=Number(url.searchParams.get('after')||0);
         if(!/^[0-9a-f-]{36}$/.test(id)||!Number.isSafeInteger(after)||after<0)return reply({error:'Parameter tidak valid.'},400);
-        const access=await env.DB.prepare('SELECT id FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
+        const access=await env.DB.prepare('SELECT id,user_a,user_b FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
         if(!access)return reply({error:'Percakapan tidak ditemukan.'},404);
+        await deliveredWhileOnline(env,me.id,id);
+        const partnerId=access.user_a===me.id?access.user_b:access.user_a;
+        const receipt=await env.DB.prepare('SELECT delivered_id,read_id FROM tc_chat_receipts WHERE chat_id=? AND user_id=?').bind(id,partnerId).first();
         let mediaSchemaReady=true;
         try { await ensureExtras(env); }
         catch(e) { mediaSchemaReady=false; console.error('Schema media unavailable, serving text-only',e?.message); }
@@ -229,7 +263,32 @@ export default {
           : projection+' WHERE m.id IN (SELECT id FROM tc_direct_messages WHERE chat_id=? ORDER BY id DESC LIMIT 100) ORDER BY m.id ASC';
         const statement=env.DB.prepare(sql);
         const r=after>0?await statement.bind(id,after).all():await statement.bind(id).all();
-        return reply({ok:true,messages:r.results});
+        return reply({ok:true,messages:r.results.map(m=>({...m,delivery_status:m.sender_id!==me.id?null:Number(receipt?.read_id||0)>=m.id?'read':Number(receipt?.delivered_id||0)>=m.id?'delivered':'sent'})),partnerReceipt:{deliveredId:receipt?.delivered_id||0,readId:receipt?.read_id||0}});
+      }
+      if(path==='/api/chat/receipt'&&request.method==='GET'){
+        const id=clean(url.searchParams.get('conversationId'));
+        if(!/^[0-9a-f-]{36}$/.test(id))return reply({error:'ID tidak valid'},400);
+        const c=await env.DB.prepare('SELECT user_a,user_b FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
+        if(!c)return reply({error:'Percakapan tidak ditemukan.'},404);
+        await ensureReceiptSchema(env);
+        const other=c.user_a===me.id?c.user_b:c.user_a;
+        const state=await env.DB.prepare('SELECT delivered_id,read_id FROM tc_chat_receipts WHERE chat_id=? AND user_id=?').bind(id,other).first();
+        return reply({ok:true,deliveredId:state?.delivered_id||0,readId:state?.read_id||0});
+      }
+      if(path==='/api/chat/read'&&request.method==='POST'){
+        let d;try{d=await readJSON(request)}catch{return reply({error:'Permintaan tidak valid'},400)}
+        const id=clean(d.conversationId),last=Number(d.lastMessageId);
+        if(!/^[0-9a-f-]{36}$/.test(id)||!Number.isSafeInteger(last)||last<1)return reply({error:'Parameter tidak valid'},400);
+        const c=await env.DB.prepare('SELECT id FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
+        if(!c)return reply({error:'Percakapan tidak ditemukan.'},404);
+        await ensureReceiptSchema(env);
+        const row=await env.DB.prepare('SELECT MAX(id) AS id FROM tc_direct_messages WHERE chat_id=? AND sender_id<>? AND id<=?').bind(id,me.id,last).first();
+        const readId=Number(row?.id||0);
+        if(readId>0)await env.DB.prepare(`INSERT INTO tc_chat_receipts(chat_id,user_id,delivered_id,read_id)
+          VALUES(?,?,?,?) ON CONFLICT(chat_id,user_id) DO UPDATE SET
+          delivered_id=MAX(tc_chat_receipts.delivered_id,excluded.delivered_id),
+          read_id=MAX(tc_chat_receipts.read_id,excluded.read_id),updated_at=CURRENT_TIMESTAMP`).bind(id,me.id,readId,readId).run();
+        return reply({ok:true,readId});
       }
       if(path==='/api/chat/send'&&request.method==='POST'){
         let d;try{d=await readJSON(request)}catch{return reply({error:'Permintaan tidak valid'},400)}

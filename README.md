@@ -96,3 +96,12 @@ wrangler-media-ready.jsonc    Template config siap tempel jika bucket R2 tersedi
 
 ## Perbaikan 6.1 (12 November 2026)
 Login Turnstile: label tombol otomatis menyesuaikan status dan pemeriksaan token secara berkala mengatasi kondisi widget 'Success' tetapi tombol tetap disabled. Tidak ada perubahan pada tabel D1.
+
+
+## V6.4: status pesan & notifikasi halaman aktif
+- `✓` setelah tersimpan di D1 (terkirim ke server).
+- `✓✓` abu setelah akun penerima aktif dan mengambil pesan melalui API (diterima pada aplikasi yang aktif).
+- `✓✓` biru setelah penerima membuka percakapan di halaman yang terlihat dan API read berhasil.
+- Tabel `tc_chat_receipts` dibuat otomatis pada permintaan chat pertama. Tidak perlu migrasi manual.
+- Notifikasi browser diperbaiki menggunakan `serviceWorker.showNotification` jika tersedia dan mendeteksi pesan via ID.
+- **Belum Web Push:** notifikasi saat app ditutup/ditangguhkan tetap tidak bisa dijamin.

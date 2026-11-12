@@ -56,3 +56,9 @@ input,textarea,select{font-size:16px!important}
 .tc-call-missed{color:#bd3c3c}
 .sidebar-title{display:flex;align-items:center;gap:7px}
 .sidebar-title h2{margin-right:auto}
+
+/* V6.4: centang pengiriman yang didukung bukti server */
+.tc-bubble-foot{display:flex;align-items:center;justify-content:flex-end;gap:5px;margin-top:4px}
+.tc-bubble-foot time{margin:0}
+.tc-receipt{font-size:12px;font-weight:700;letter-spacing:-4px;padding-right:4px;color:#687f7b;min-width:17px;white-space:nowrap}
+.tc-receipt-read{color:#1686c9}

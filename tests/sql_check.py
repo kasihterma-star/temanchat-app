@@ -8,7 +8,21 @@ CREATE TABLE auth_tokens(id TEXT,user_id TEXT,token_hash TEXT,purpose TEXT,expir
 CREATE TABLE auth_rate_limits(key TEXT PRIMARY KEY,attempts INTEGER,created_at TEXT);
 CREATE TABLE sessions(id TEXT,user_id TEXT,token_hash TEXT,device_name TEXT,expires_at TEXT,revoked_at TEXT);
 ''')
-conn.executescript(Path('/mnt/data/v5inspect/sql/01-chat-v5.sql').read_text())
+conn.executescript("""
+CREATE TABLE tc_direct_chats (
+ id TEXT PRIMARY KEY,pair_key TEXT NOT NULL UNIQUE,user_a TEXT NOT NULL,user_b TEXT NOT NULL,
+ created_at TEXT DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_a) REFERENCES users(id),FOREIGN KEY(user_b) REFERENCES users(id)
+);
+CREATE TABLE tc_direct_messages (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL,sender_id TEXT NOT NULL,
+ body TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(chat_id) REFERENCES tc_direct_chats(id),FOREIGN KEY(sender_id) REFERENCES users(id)
+);
+CREATE TABLE tc_chat_receipts (
+ chat_id TEXT NOT NULL,user_id TEXT NOT NULL,delivered_id INTEGER DEFAULT 0,read_id INTEGER DEFAULT 0,
+ updated_at TEXT DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(chat_id,user_id)
+);
+""")
 conn.executescript((base/'migrations/02-v6-extras.sql').read_text())
 for user,name in [('1','Satu'),('2','Dua')]:
  conn.execute("INSERT INTO users(id,username,email,display_name,email_verified) VALUES(?,?,?,?,1)",(user,name.lower(),name+'@example.com',name))
@@ -25,4 +39,12 @@ msg=conn.execute('''SELECT m.id,m.sender_id,m.body,m.created_at,l.media_id,f.mim
  (SELECT id FROM tc_direct_messages WHERE chat_id='chat1' ORDER BY id DESC LIMIT 100) ORDER BY m.id ASC''').fetchone()
 assert msg[4:] == ('file1','image/png'),msg
 assert conn.execute("SELECT COUNT(*) FROM tc_call_signals").fetchone()[0] == 1
-print('PASS SQL: V5 + tambahan V6, media, signaling call, foreign key, join pesan')
+# Simulasi penerima yang mengambil pesan di D1.
+conn.execute('''INSERT INTO tc_chat_receipts(chat_id,user_id,delivered_id)
+ SELECT c.id,?, COALESCE((SELECT MAX(m.id) FROM tc_direct_messages m WHERE m.chat_id=c.id AND m.sender_id<>?),0)
+ FROM tc_direct_chats c WHERE (c.user_a=? OR c.user_b=?) AND EXISTS(
+ SELECT 1 FROM tc_direct_messages m WHERE m.chat_id=c.id AND m.sender_id<>?)
+ ON CONFLICT(chat_id,user_id) DO UPDATE SET delivered_id=MAX(tc_chat_receipts.delivered_id,excluded.delivered_id)
+ ''',('2','2','2','2','2'))
+assert conn.execute("SELECT delivered_id FROM tc_chat_receipts WHERE chat_id='chat1' AND user_id='2'").fetchone()[0]==1
+print('PASS SQL: chat, media, signaling, receipt dan join pesan')
