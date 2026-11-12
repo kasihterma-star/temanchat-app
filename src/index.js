@@ -235,11 +235,15 @@ export default {
           (SELECT m.body FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message,
           (SELECT m.created_at FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_time,
           (SELECT m.sender_id FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_sender_id,
-          (SELECT m.id FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message_id
+          (SELECT m.id FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message_id,
+          (SELECT COUNT(*) FROM tc_direct_messages incoming
+            WHERE incoming.chat_id=c.id AND incoming.sender_id<>?
+              AND incoming.id>COALESCE((SELECT receipt.read_id FROM tc_chat_receipts receipt
+                WHERE receipt.chat_id=c.id AND receipt.user_id=?),0)) AS unread_count
           FROM tc_direct_chats c
           JOIN users u ON u.id=CASE WHEN c.user_a=? THEN c.user_b ELSE c.user_a END
           WHERE c.user_a=? OR c.user_b=?
-          ORDER BY COALESCE(last_time,c.created_at) DESC LIMIT 100`).bind(me.id,me.id,me.id).all();
+          ORDER BY COALESCE(last_time,c.created_at) DESC LIMIT 100`).bind(me.id,me.id,me.id,me.id,me.id).all();
         return reply({ok:true,conversations:result.results});
       }
       if(path==='/api/chat/messages'&&request.method==='GET'){

@@ -7,21 +7,27 @@ let pollTimer=null,busyMessages=false,busyChats=false,lastListUpdate=0,toastTime
 let mediaEnabled=false,currentCall=null,checkingCalls=false,callBusy=false;
 // Notifikasi browser best-effort saat JavaScript berjalan; BUKAN Web Push saat PWA ditutup.
 let notificationBaselineReady=false;
+const previousUnread=new Map();
+const BASE_TITLE='TemanChat — Pesan';
 const readAcknowledged=new Map();
 const seenChatLast=new Map();
 function notifySupported(){return 'Notification' in window&&window.isSecureContext}
 async function notifyLocal(title,body,tag){
- if(!notifySupported()||Notification.permission!=='granted')return;
+ if(!notifySupported()||Notification.permission!=='granted')return false;
  const options={body,tag,icon:'/icons/icon-192.png',renotify:true};
- // iPhone PWA lebih cocok dengan ServiceWorkerRegistration.showNotification.
+ // Hindari serviceWorker.ready yang dapat menggantung sebelum worker aktif.
  try{
-   if('serviceWorker' in navigator){
-     const reg=await navigator.serviceWorker.ready;
-     if(reg.showNotification){await reg.showNotification(title,options);return}
+  if('serviceWorker' in navigator){
+   const reg=await navigator.serviceWorker.getRegistration();
+   if(reg?.active && typeof reg.showNotification==='function'){
+    await reg.showNotification(title,options);return true;
    }
-   const n=new Notification(title,options);
-   n.onclick=()=>{window.focus();n.close()};
- }catch(e){console.warn('Local notification',e)}
+  }
+ }catch(e){console.warn('Notifikasi SW:',e)}
+ try{
+  const n=new Notification(title,options);
+  n.onclick=()=>{window.focus();n.close()};return true;
+ }catch(e){console.warn('Notifikasi browser:',e);return false}
 }
 
 const UUID=/^[0-9a-f-]{36}$/;
@@ -56,7 +62,13 @@ function renderChats(){
   const b=element('button','contact'+(!c.searchPerson&&c.id===active?.id?' active':''));b.type='button';
   const av=element('div','avatar teal',avatar(c.other_name)),body=element('div','contact-content'),top=element('div','contact-top');
   top.append(element('b','',c.other_name),element('small','',c.searchPerson?'Mulai chat':smallTime(c.last_time)));
-  body.append(top,element('p','',c.searchPerson?'@'+c.other_username:(c.last_message||'@'+c.other_username)));b.append(av,body);
+  body.append(top,element('p','',c.searchPerson?'@'+c.other_username:(c.last_message||'@'+c.other_username)));
+  const unread=Math.max(0,Number(c.unread_count||0));
+  if(!c.searchPerson&&unread>0){
+   const badge=element('span','tc-unread',unread>99?'99+':String(unread));
+   badge.title=unread+' pesan belum dibaca';badge.setAttribute('aria-label',badge.title);
+   b.classList.add('tc-has-unread');b.append(av,body,badge);
+  }else b.append(av,body);
   b.addEventListener('click',async()=>{
    if(c.searchPerson){
     b.disabled=true;
@@ -73,16 +85,27 @@ async function fetchChats(){
  if(busyChats||!me)return;busyChats=true;
  try{
   const d=await api('/api/chat/conversations');chats=d.conversations||[];
-  // Periksa ID pesan terakhir. Jangan menganggap pesan sendiri sebagai pesan masuk.
+  // Hitung pesan yang belum dibaca dari server, bukan hanya ID pesan terakhir.
+  let totalUnread=0;
+  const activeVisible=!!active&&!document.hidden&&
+    (innerWidth>740||!$('conversation').classList.contains('mobile-hidden'));
   for(const c of chats){
-   const previous=seenChatLast.get(c.id);
-   const current=Number(c.last_message_id||0);
-   if(notificationBaselineReady&&previous!==undefined&&current>previous&&c.last_sender_id!==me.id&&
-      (document.hidden||active?.id!==c.id)){
-     void notifyLocal('Pesan dari '+(c.other_name||'teman'),String(c.last_message||'Pesan baru').slice(0,120),'chat-msg-'+c.id+'-'+current);
+   const count=Math.max(0,Number(c.unread_count||0));
+   totalUnread+=count;
+   const previous=previousUnread.get(c.id);
+   const isCurrentVisible=activeVisible&&active?.id===c.id;
+   if(notificationBaselineReady&&count>(previous??0)&&!isCurrentVisible){
+    const increase=count-(previous??0);
+    // Notifikasi lokal hanya saat JavaScript masih aktif; halaman tertutup perlu Web Push.
+    void notifyLocal('Pesan dari '+(c.other_name||'teman'),
+      increase===1?String(c.last_message||'Pesan baru').slice(0,120):increase+' pesan baru',
+      'chat-msg-'+c.id+'-'+String(c.last_message_id||count));
+    if(!document.hidden)toast(increase+' pesan baru dari '+(c.other_name||'teman'));
    }
-   seenChatLast.set(c.id,current);
+   previousUnread.set(c.id,count);
   }
+  for(const id of [...previousUnread.keys()])if(!chats.some(c=>c.id===id))previousUnread.delete(id);
+  document.title=totalUnread>0?'('+totalUnread+') '+BASE_TITLE:BASE_TITLE;
   notificationBaselineReady=true;
 
   if(active){const now=chats.find(c=>c.id===active.id);if(now)active=now;}
@@ -150,6 +173,8 @@ async function markVisibleRead(chatId,lastSeen){
  // Hanya tandai dibaca setelah pesan dirender dan chat terbuka.
  try{const d=await post('/api/chat/read',{conversationId:chatId,lastMessageId:lastSeen});
   readAcknowledged.set(chatId,Math.max(already,Number(d.readId||0)));
+  // Segera segarkan badge agar angka hilang setelah percakapan dibaca.
+  if(!busyChats)void fetchChats();
  }catch(e){console.warn('Read acknowledgement:',e.message)}
 }
 function addMessage(m){
@@ -397,6 +422,8 @@ async function init(){
   await checkMissedCalls();pollTimer=setInterval(tick,4000);await checkIncoming();
  }catch(e){console.error('TemanChat init:',e);if(e.message!=='Sesi berakhir')toast('Tidak bisa memuat akun. Periksa koneksi lalu muat ulang.');}
 }
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&active)void fetchMessages(true)});
+document.addEventListener('visibilitychange',()=>{
+ if(!document.hidden){void fetchChats();if(active)void fetchMessages(true)}
+});
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(console.warn));
 init();

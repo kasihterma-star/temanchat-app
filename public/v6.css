@@ -62,3 +62,12 @@ input,textarea,select{font-size:16px!important}
 .tc-bubble-foot time{margin:0}
 .tc-receipt{font-size:12px;font-weight:700;letter-spacing:-4px;padding-right:4px;color:#687f7b;min-width:17px;white-space:nowrap}
 .tc-receipt-read{color:#1686c9}
+
+/* V6.5: badge jumlah pesan belum dibaca */
+.contact{position:relative;display:flex;align-items:center;min-width:0}
+.contact-content{min-width:0;flex:1 1 auto}
+.tc-unread{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
+ min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#087d62;color:#fff;
+ font-size:12px;font-weight:750;line-height:1;box-sizing:border-box}
+.tc-has-unread .contact-content b{font-weight:800}
+.tc-has-unread .contact-content p{font-weight:650}

@@ -1,0 +1,15 @@
+TemanChat V6.5 — Badge Pesan Belum Dibaca + Notifikasi Lokal
+
+1. Cadangkan dulu repository lama.
+2. Ekstrak ZIP ini, salin SELURUH ISI ke Documents/GitHub/temanchat-app lalu Replace.
+3. GitHub Desktop: Commit "V6.5 Badge Pesan Belum Dibaca", Push origin.
+4. Tunggu Cloudflare Deployments berstatus Ready.
+5. Buka 2 akun. Kirim 3 pesan dari akun A ke B ketika B tidak membuka chat A.
+6. Akun B: badge 3 muncul di daftar percakapan, dan judul tab (3) TemanChat.
+7. Buka chat A di akun B, badge harus kembali 0. Di akun A centang biru.
+
+Notifikasi lokal: hanya ketika aplikasi/browser masih berjalan dan sudah memperoleh izin.
+Saat aplikasi sepenuhnya ditutup, perlu Web Push VAPID + penyimpanan subscription + pengiriman
+push oleh server. iPhone: perlu memasang PWA dari Safari ke Home Screen dan izin notifikasi.
+Tidak perlu SQL manual: memanfaatkan tc_chat_receipts yang sudah ada.
+Jangan unggah .env/.dev.vars atau kredensial pribadi ke GitHub.

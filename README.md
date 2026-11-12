@@ -105,3 +105,9 @@ Login Turnstile: label tombol otomatis menyesuaikan status dan pemeriksaan token
 - Tabel `tc_chat_receipts` dibuat otomatis pada permintaan chat pertama. Tidak perlu migrasi manual.
 - Notifikasi browser diperbaiki menggunakan `serviceWorker.showNotification` jika tersedia dan mendeteksi pesan via ID.
 - **Belum Web Push:** notifikasi saat app ditutup/ditangguhkan tetap tidak bisa dijamin.
+
+
+## V6.5: pesan belum dibaca
+Setiap daftar chat menampilkan badge jumlah pesan masuk di atas watermark baca terakhir
+(tc_chat_receipts.read_id), dan badge otomatis dibersihkan setelah pesan ditampilkan.
+Notifikasi lokal diperbaiki, tetapi NOT Web Push background: aplikasi ditutup sepenuhnya tetap tidak menerima notifikasi.
