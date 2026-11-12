@@ -47,3 +47,12 @@ input,textarea,select{font-size:16px!important}
  .send{flex:0 0 44px}
  .compose .round{flex:0 0 38px}
 }
+
+/* V6.3: daftar riwayat panggilan */
+.tc-call-history{display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow:auto;min-width:0}
+.tc-call-history-item{display:flex;flex-direction:column;gap:3px;padding:11px 12px;border:1px solid #e4eeeb;border-radius:12px;overflow-wrap:anywhere}
+.tc-call-history-item small{color:#6b817b;font-size:12px}
+.tc-call-history-person{font-weight:650;color:#183b34}
+.tc-call-missed{color:#bd3c3c}
+.sidebar-title{display:flex;align-items:center;gap:7px}
+.sidebar-title h2{margin-right:auto}

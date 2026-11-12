@@ -175,6 +175,29 @@ $('attachBtn').onclick=()=>{if(!mediaEnabled)toast('Untuk mengirim foto, hubungk
 function modal(title,text,buttons=[]){$('modalTitle').textContent=title;$('modalDesc').textContent=text;const c=$('modalContent');c.replaceChildren();for(const b of buttons){const btn=element('button','primary',b.label);btn.onclick=b.action;c.append(btn)}$('modal').showModal();}
 $('closeModal').onclick=()=>$('modal').close();
 $('moreBtn').onclick=()=>modal('Percakapan',active?`Percakapan pribadi dengan @${active.other_username}. Pesan teks belum menggunakan enkripsi ujung-ke-ujung.`:'Silakan pilih teman.');
+// Riwayat tersimpan di D1, bukan hanya saat browser terbuka.
+async function showCallHistory(){
+  modal('Riwayat panggilan','Panggilan masuk, keluar, dan tidak terjawab dari akun ini.');
+  const box=$('modalContent');box.replaceChildren(element('p','tc-hint','Memuat riwayat…'));
+  try{
+    const data=await api('/api/calls/history');box.replaceChildren();
+    if(!data.calls.length){box.append(element('p','tc-hint','Belum ada riwayat panggilan.'));return}
+    const list=element('div','tc-call-history');
+    for(const c of data.calls){
+      const item=element('div','tc-call-history-item');
+      const symbol=c.direction==='outgoing'?'↗':'↙';
+      const missed=c.status==='missed'||c.status==='declined';
+      const status=c.status==='ringing'?'Sedang memanggil':c.status==='missed'?'Tak terjawab':c.status==='declined'?'Ditolak':c.status==='answered'?'Terjawab':'Selesai';
+      const heading=element('div','tc-call-history-person',(missed?'☎ ':'')+symbol+' '+(c.other_name||'Teman'));
+      if(missed)heading.classList.add('tc-call-missed');
+      const details=element('small','',`${c.kind==='video'?'Video':'Suara'} · ${status} · ${smallTime(c.created_at)}`);
+      const date=element('small','',String(c.created_at||'').slice(0,10));
+      item.append(heading,details,date);list.append(item);
+    }
+    box.append(list);
+  }catch(e){box.replaceChildren(element('p','tc-hint','Riwayat belum bisa dimuat: '+e.message))}
+}
+$('callHistoryBtn').onclick=showCallHistory;
 $('settingsBtn').onclick=()=>{
  modal('Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
@@ -293,8 +316,22 @@ async function checkIncoming(){
  try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true);notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id);}}
  catch(e){console.warn('Incoming call',e.message)}finally{checkingCalls=false}
 }
+let lastKnownCallId=null,callHistoryReady=false,lastHistoryCheck=0;
+async function checkMissedCalls(){
+  if(!me)return;
+  try{
+    const d=await api('/api/calls/history');
+    const incoming=(d.calls||[]).filter(c=>c.direction==='incoming'&&c.status==='missed');
+    if(callHistoryReady&&incoming.length&&incoming[0].id!==lastKnownCallId){
+      const newest=incoming[0];
+      notifyLocal('Panggilan tak terjawab',`${newest.other_name||'Teman'} menelepon Anda`,'missed-'+newest.id);
+    }
+    lastKnownCallId=incoming[0]?.id||null;callHistoryReady=true;
+  }catch(e){console.warn('Call history polling',e.message)}
+}
 async function tick(){
  if(!me)return;
+ if(Date.now()-lastHistoryCheck>20000){lastHistoryCheck=Date.now();await checkMissedCalls();}
  if(document.hidden){if(Date.now()-lastListUpdate>8000){lastListUpdate=Date.now();await fetchChats();}return;}
  if(currentCall)await pollCall();else await checkIncoming();
  if(active)await fetchMessages();
@@ -312,7 +349,7 @@ async function init(){
   await fetchChats();
   try{const m=await api('/api/media/config');mediaEnabled=!!m.enabled}catch{mediaEnabled=false}
   TCS.cleanup();
-  pollTimer=setInterval(tick,4000);await checkIncoming();
+  await checkMissedCalls();pollTimer=setInterval(tick,4000);await checkIncoming();
  }catch(e){console.error('TemanChat init:',e);if(e.message!=='Sesi berakhir')toast('Tidak bisa memuat akun. Periksa koneksi lalu muat ulang.');}
 }
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(console.warn));

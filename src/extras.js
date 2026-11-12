@@ -194,6 +194,28 @@ export async function handleExtra(request, env, me, deps){
   }
   return bad('Endpoint media tidak tersedia.',404);
  }
+ if(p==='/api/calls/history'&&request.method==='GET'){
+  // Status yang masih ringing >90 detik dihitung tak terjawab tanpa perlu menunggu cron.
+  // Hanya pemanggil/penerima yang sedang login boleh melihat riwayatnya.
+  const data=await env.DB.prepare(`SELECT c.id,c.chat_id,c.kind,c.status,c.created_at,c.updated_at,
+    c.caller_id,c.callee_id,u.display_name AS other_name,u.username AS other_username,
+    EXISTS(SELECT 1 FROM tc_call_signals sig WHERE sig.call_id=c.id AND sig.kind='answer') AS has_answer
+    FROM tc_call_sessions c JOIN users u
+      ON u.id=CASE WHEN c.caller_id=? THEN c.callee_id ELSE c.caller_id END
+    WHERE c.caller_id=? OR c.callee_id=?
+    ORDER BY c.created_at DESC LIMIT 60`).bind(me.id,me.id,me.id).all();
+  const cutoff=Date.now()-90000;
+  const calls=(data.results||[]).map(c=>{
+    const stale=c.status==='ringing'&&Date.parse(String(c.created_at).replace(' ','T')+'Z')<cutoff;
+    const noAnswer=c.status==='ended'&&!Number(c.has_answer);
+    return {id:c.id,chatId:c.chat_id,kind:c.kind,
+      direction:c.caller_id===me.id?'outgoing':'incoming',
+      status:stale||noAnswer?'missed':c.status,
+      other_name:c.other_name,other_username:c.other_username,
+      created_at:c.created_at};
+  });
+  return res({ok:true,calls});
+ }
  if(p==='/api/calls/config'&&request.method==='GET')return res({ok:true,iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}],turnConfigured:false});
  if(p==='/api/calls/start'&&request.method==='POST'){
   const d=await deps.readJSON(request),chat=await member(env,trimmed(d.conversationId),me.id),kind=trimmed(d.kind);

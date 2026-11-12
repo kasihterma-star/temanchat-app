@@ -1,0 +1,14 @@
+TemanChat V6.3 — Riwayat panggilan + notifikasi saat aplikasi berjalan
+
+1. Ekstrak ZIP. Salin isi folder ke Documents\GitHub\temanchat-app; Replace.
+2. GitHub Desktop: Commit 'TemanChat V6.3 Riwayat Panggilan', Push origin.
+3. Periksa deployment Cloudflare Ready. Refresh chat.ege.my.id.
+4. Di sidebar dekat judul Pesan, tekan ikon ☎ untuk melihat riwayat panggilan.
+5. Di pengaturan, izinkan notifikasi browser. Notifikasi pesan dan panggilan hanya dapat bekerja selama browser/PWA masih berjalan.
+
+PENTING:
+- Versi ini BELUM berisi Web Push latar belakang, sehingga notifikasi ketika tab/PWA ditutup sepenuhnya tidak dijanjikan.
+- Safari iPhone harus memasang PWA ke Layar Utama untuk dukungan notifikasi Web Push; aplikasi ini BELUM menyediakan langganan Web Push.
+- Belum ada R2 binding; foto belum dapat dikirim.
+- Panggilan dari versi sebelum riwayat ini tetap dapat tampil berdasarkan status di D1. Penentuan missed untuk panggilan yang berakhir sebelum dijawab adalah pendekatan sederhana.
+- Tidak perlu menjalankan SQL atau mengubah secrets.
