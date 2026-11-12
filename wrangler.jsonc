@@ -15,7 +15,7 @@
     }
   ],
   "triggers": {
-    "crons": ["0 2 * * *"]
+    "crons": ["0 2 * * *", "* * * * *"]
   }
   // Setelah membuat bucket 'temanchat-media', AKTIFKAN blok berikut (hapus //):
   // ,"r2_buckets": [

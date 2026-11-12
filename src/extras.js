@@ -132,6 +132,9 @@ export async function handleExtra(request, env, me, deps){
    const label=f.mime_type.startsWith('image/')?'📷 Foto':f.mime_type.startsWith('video/')?'🎬 Video':'📎 Dokumen';
    const msg=await env.DB.prepare('INSERT INTO tc_direct_messages(chat_id,sender_id,body) VALUES(?,?,?) RETURNING id,created_at').bind(chatId,me.id,label).first();
    await env.DB.prepare('INSERT INTO tc_media_links(message_id,media_id,chat_id) VALUES(?,?,?)').bind(msg.id,mediaId,chatId).run();
+   const chat=await member(env,chatId,me.id);
+   const otherId=chat.user_a===me.id?chat.user_b:chat.user_a;
+   deps.sendPush?.(otherId,{title:'TemanChat',body:label+' dari '+me.display_name,url:'/?chat='+chatId,tag:'tc-media-'+msg.id},86400);
    return res({ok:true,message:{id:msg.id,sender_id:me.id,body:label,created_at:msg.created_at,media_id:mediaId,mime_type:f.mime_type}});
   }
   if(p==='/api/media/file'&&request.method==='GET'){
@@ -223,6 +226,7 @@ export async function handleExtra(request, env, me, deps){
   if(!await deps.limit(request,env,'call-start',8))return bad('Terlalu banyak panggilan. Coba beberapa saat lagi.',429);
   const callee=chat.user_a===me.id?chat.user_b:chat.user_a,id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO tc_call_sessions(id,chat_id,caller_id,callee_id,kind) VALUES(?,?,?,?,?)').bind(id,chat.id,me.id,callee,kind).run();
+  deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',tag:'tc-call-'+id},120);
   return res({ok:true,callId:id});
  }
  if(p==='/api/calls/incoming'&&request.method==='GET'){

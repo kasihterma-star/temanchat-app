@@ -1,0 +1,25 @@
+TEMANCHAT V6.6 - WEB PUSH SESUNGGUHNYA
+
+1. Ekstrak ZIP, salin semua isinya ke Documents\GitHub\temanchat-app lalu Replace.
+2. Di komputer pasang Node.js 20+ (jika belum tersedia). Buka Terminal/PowerShell di folder repository.
+3. Jalankan: node tools/generate-vapid.mjs
+4. Di Cloudflare Dashboard > Workers & Pages > temanchat-app > Settings > Variables and Secrets,
+   buat dua Secret terpisah sesuai OUTPUT:
+   VAPID_PUBLIC_KEY  = nilai publik (aman sebagai variable juga)
+   VAPID_PRIVATE_KEY = nilai privat (HARUS Secret, jangan disalin ke GitHub atau dikirim lewat chat)
+5. Commit dan Push V6.6 via GitHub Desktop, periksa deployment Ready.
+6. Di iPhone jalankan dari ikon Layar Utama, buka Pengaturan (roda gigi) > Aktifkan notifikasi Web Push.
+7. Tekan Kirim notifikasi uji. Periksa izin notifikasi iPhone > Settings > Notifications > TemanChat.
+8. Uji akun berbeda: tutup PWA penerima, kirim pesan dari akun pengirim, tunggu notifikasi.
+
+PENTING:
+- Tidak memerlukan SQL manual: tabel tc_push_subscriptions dibuat saat pertama aktivasi.
+- Data chat dan status centang lama tidak dihapus.
+- Web Push hanya mengirim notifikasi, BUKAN mengaktifkan mikrofon/kamera di background.
+  Penerima membuka notifikasi, masuk ke chat, dan dapat menerima panggilan bila masih berdering.
+- Pesan notifikasi menampilkan nama pengirim, bukan isi pesan, untuk menjaga privasi.
+- Worker Cron berjalan setiap menit untuk mencatat dan memberitahu panggilan tak terjawab.
+- Jika tombol uji mengatakan terkirim tetapi notifikasi belum muncul, periksa iPhone Settings > Notifications > TemanChat dan Focus.
+- Koneksi internet, mode Fokus iOS, baterai, dan kebijakan platform dapat menunda notifikasi.
+- Jika login berganti akun di perangkat sama, aktivasi ulang di akun baru agar langganan terkait akun benar.
+- JANGAN upload file output berisi VAPID_PRIVATE_KEY ke GitHub.

@@ -1,3 +1,7 @@
+# TemanChat V6.6 — Web Push
+
+Perubahan utama adalah Web Push berbasis VAPID dan enkripsi RFC8291. Lihat `PANDUAN-V6.6-WEB-PUSH.txt`.
+
 # TemanChat V6 Terpadu (BETA) — Cloudflare Workers + D1
 
 **Target aplikasi:** chat pribadi 1:1 untuk keluarga & teman, Android/iPhone/komputer, PWA install, satu akun banyak perangkat. Proyek ini menggabungkan file frontend/backend sebelumnya supaya tidak perlu mengganti file satu per satu setiap kali.

@@ -30,6 +30,32 @@ async function notifyLocal(title,body,tag){
  }catch(e){console.warn('Notifikasi browser:',e);return false}
 }
 
+// V6.6 Web Push: izin diminta HANYA setelah ketukan tombol di Pengaturan.
+let serverPushEnabled=false;
+const fromB64url=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)),c=>c.charCodeAt(0));
+async function registerPush(){
+ if(!('serviceWorker' in navigator)||!('PushManager' in window)||!notifySupported())throw Error('Perangkat atau browser tidak mendukung Web Push. Di iPhone buka aplikasi dari Layar Utama.');
+ const cfg=await api('/api/push/config');
+ if(!cfg.configured||!cfg.publicKey)throw Error('Kunci VAPID Cloudflare belum dikonfigurasi.');
+ let reg=await navigator.serviceWorker.getRegistration('/');
+ if(!reg)reg=await navigator.serviceWorker.register('/sw.js');
+ await navigator.serviceWorker.ready;
+ const permission=await Notification.requestPermission();
+ if(permission!=='granted')throw Error('Izinkan notifikasi melalui pengaturan perangkat.');
+ let sub=await reg.pushManager.getSubscription();
+ if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:fromB64url(cfg.publicKey)});
+ await post('/api/push/subscribe',{subscription:sub.toJSON()});
+ serverPushEnabled=true;
+ return true;
+}
+async function checkPush(){
+ try{
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||Notification.permission!=='granted')return;
+  const reg=await navigator.serviceWorker.getRegistration('/');
+  const sub=await reg?.pushManager.getSubscription();
+  if(sub){await post('/api/push/subscribe',{subscription:sub.toJSON()});serverPushEnabled=true;}
+ }catch(e){console.warn('Push registration refresh',e.message)}
+}
 const UUID=/^[0-9a-f-]{36}$/;
 function element(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
 function toast(message){const t=$('toast');t.textContent=message;t.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('visible'),4100);}
@@ -94,7 +120,7 @@ async function fetchChats(){
    totalUnread+=count;
    const previous=previousUnread.get(c.id);
    const isCurrentVisible=activeVisible&&active?.id===c.id;
-   if(notificationBaselineReady&&count>(previous??0)&&!isCurrentVisible){
+   if(notificationBaselineReady&&!serverPushEnabled&&count>(previous??0)&&!isCurrentVisible){
     const increase=count-(previous??0);
     // Notifikasi lokal hanya saat JavaScript masih aktif; halaman tertutup perlu Web Push.
     void notifyLocal('Pesan dari '+(c.other_name||'teman'),
@@ -277,17 +303,29 @@ $('settingsBtn').onclick=()=>{
  wrap.append(label,select,element('small','Foto dikirim dari perangkat, bukan dipilih dari Google Drive. Cache cloud dibersihkan 3 hari setelah backup berhasil; mode lokal tidak ikut dibersihkan otomatis.'));
  if(!TCS.getClientId())wrap.append(element('small','','Integrasi Google Drive belum dikonfigurasi. Sampai disiapkan, gunakan Lokal.'));
  else {const connect=element('button','primary','Hubungkan Google Drive');connect.onclick=async()=>{try{await TCS.connectGoogle();toast('Google Drive terhubung untuk sesi browser ini.')}catch(e){toast(e.message)}};wrap.append(connect)}
- const notifyButton=element('button','primary',
-  notifySupported()&&Notification.permission==='granted'?'Notifikasi browser aktif ✓':'Aktifkan notifikasi browser');
+ const notifyButton=element('button','primary','Aktifkan notifikasi Web Push');
  notifyButton.onclick=async()=>{
-  if(!notifySupported())return toast('Notifikasi browser tidak tersedia. Untuk iPhone, pasang PWA dari Safari.');
-  try{const permission=await Notification.requestPermission();notifyButton.textContent=permission==='granted'?'Notifikasi browser aktif ✓':'Izin notifikasi belum diberikan';
-   toast(permission==='granted'?'Notifikasi browser diaktifkan selama aplikasi berjalan.':'Izin notifikasi belum diberikan.');}
-  catch(e){toast('Tidak dapat meminta izin notifikasi: '+e.message)}
+  notifyButton.disabled=true;notifyButton.textContent='Mengaktifkan…';
+  try{await registerPush();notifyButton.textContent='Notifikasi Web Push aktif ✓';toast('Notifikasi aktif, termasuk saat PWA ditutup jika diizinkan sistem.');}
+  catch(e){notifyButton.textContent='Aktifkan notifikasi Web Push';toast(e.message)}
+  finally{notifyButton.disabled=false}
  };
- wrap.append(notifyButton,element('small','','Notifikasi ini hanya best-effort selama halaman/PWA berjalan. Agar panggilan dan pesan masuk ketika aplikasi ditutup, dibutuhkan Web Push dan pengaturan khusus iPhone.'));
+ wrap.append(notifyButton,element('small','','Di iPhone: jalankan TemanChat dari ikon Layar Utama dan izinkan notifikasi. Pengiriman saat aplikasi ditutup menggunakan Web Push.'));
+ const pushTest=element('button','primary','Kirim notifikasi uji');
+ pushTest.onclick=async()=>{try{const d=await post('/api/push/test',{});toast(d.sent?'Tes terkirim. Cek notifikasi perangkat.':'Push ditolak penyedia. Periksa Log Cloudflare.')}catch(e){toast(e.message)}};
+ wrap.append(pushTest);
  const install=element('button','primary','Instal TemanChat');install.onclick=()=>{$('modal').close();$('installBtn').click()};wrap.append(install);
- const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{try{await post('/api/auth/logout',{});location.replace('/auth.html')}catch(e){toast(e.message)}};wrap.append(logout);root.append(wrap);
+ const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{
+   try{
+    // Jangan biarkan perangkat yang logout menerima push akun sebelumnya.
+    try{
+      const reg=await navigator.serviceWorker?.getRegistration('/');
+      const sub=await reg?.pushManager?.getSubscription();
+      if(sub){await post('/api/push/unsubscribe',{endpoint:sub.endpoint});await sub.unsubscribe();}
+    }catch(e){console.warn('Push logout cleanup',e.message)}
+    await post('/api/auth/logout',{});location.replace('/auth.html')
+   }catch(e){toast(e.message)}
+ };wrap.append(logout);root.append(wrap);
 };
 $('backBtn').onclick=showList;
 window.addEventListener('resize',()=>{if(innerWidth>740){$('sidebar').classList.remove('mobile-visible');$('conversation').classList.remove('mobile-hidden')}else if(active)showChat();else showList()});
@@ -383,7 +421,7 @@ $('acceptCall').onclick=async()=>{
 };
 async function checkIncoming(){
  if(checkingCalls||currentCall||document.hidden||!me)return;checkingCalls=true;
- try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true);notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id);}}
+ try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true);(!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
  catch(e){console.warn('Incoming call',e.message)}finally{checkingCalls=false}
 }
 let lastKnownCallId=null,callHistoryReady=false,lastHistoryCheck=0;
@@ -394,7 +432,7 @@ async function checkMissedCalls(){
     const incoming=(d.calls||[]).filter(c=>c.direction==='incoming'&&c.status==='missed');
     if(callHistoryReady&&incoming.length&&incoming[0].id!==lastKnownCallId){
       const newest=incoming[0];
-      notifyLocal('Panggilan tak terjawab',`${newest.other_name||'Teman'} menelepon Anda`,'missed-'+newest.id);
+      if(!serverPushEnabled)notifyLocal('Panggilan tak terjawab',`${newest.other_name||'Teman'} menelepon Anda`,'missed-'+newest.id);
     }
     lastKnownCallId=incoming[0]?.id||null;callHistoryReady=true;
   }catch(e){console.warn('Call history polling',e.message)}
@@ -417,6 +455,9 @@ async function init(){
   $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V6'));
   placeholder('Cari username teman untuk memulai percakapan.');
   await fetchChats();
+  const linkedChat=new URLSearchParams(location.search).get('chat');
+  if(linkedChat&&UUID.test(linkedChat)){const destination=chats.find(c=>c.id===linkedChat);if(destination)void selectChat(destination);}
+  void checkPush();
   try{const m=await api('/api/media/config');mediaEnabled=!!m.enabled}catch{mediaEnabled=false}
   TCS.cleanup();
   await checkMissedCalls();pollTimer=setInterval(tick,4000);await checkIncoming();

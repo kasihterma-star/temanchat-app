@@ -1,3 +1,4 @@
+import { pushApi, sendPush } from './push.js';
 // TemanChat V6 terpadu: login, chat, media R2 opsional, sinyal WebRTC.
 import { ensureExtras, handleExtra, cleanup } from './extras.js';
 const HOST = 'chat.ege.my.id';
@@ -97,7 +98,7 @@ async function consumeToken(env,raw,purpose){
   return changed.meta.changes?row:null;
 }
 export default {
- async fetch(request,env){
+ async fetch(request,env,ctx){
   const url=new URL(request.url),path=url.pathname;
   try {
     if(path==='/api/health'&&request.method==='GET'){
@@ -205,6 +206,10 @@ export default {
       }
     }
 
+    if(path.startsWith('/api/push/')){
+      const me=await userSession(request,env);
+      return await pushApi(request,env,me);
+    }
     // V5: API pesan. Selalu memerlukan sesi aktif dan keanggotaan chat.
     if(path.startsWith('/api/chat/')){
       const me=await userSession(request,env);
@@ -298,7 +303,7 @@ export default {
         let d;try{d=await readJSON(request)}catch{return reply({error:'Permintaan tidak valid'},400)}
         const id=clean(d.conversationId),body=typeof d.body==='string'?d.body.trim():'';
         if(!/^[0-9a-f-]{36}$/.test(id)||!body||body.length>1000)return reply({error:'Pesan wajib diisi, maksimal 1000 karakter.'},400);
-        const access=await env.DB.prepare('SELECT id FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
+        const access=await env.DB.prepare('SELECT id,user_a,user_b FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
         if(!access)return reply({error:'Percakapan tidak ditemukan.'},404);
         if(!await limit(request,env,'chat-send',90))return reply({error:'Terlalu banyak pesan. Coba lagi nanti.'},429);
         // Boleh bercanda dengan pesan sama, tetapi jangan mengulang berlebihan.
@@ -306,13 +311,15 @@ export default {
         const repeats=await env.DB.prepare('INSERT INTO auth_rate_limits(key,attempts,created_at) VALUES(?,1,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(repeatKey).first();
         if(Number(repeats?.attempts)>10)return reply({error:'Pesan yang sama terlalu sering. Coba lagi dalam beberapa detik.'},429);
         const sent=await env.DB.prepare('INSERT INTO tc_direct_messages(chat_id,sender_id,body) VALUES(?,?,?) RETURNING id,created_at').bind(id,me.id,body).first();
+        const recipientId=access.user_a===me.id?access.user_b:access.user_a;
+        ctx?.waitUntil(sendPush(env,recipientId,{title:'TemanChat',body:'Pesan baru dari '+me.display_name,url:'/?chat='+encodeURIComponent(id),tag:'tc-message-'+id+'-'+sent.id,kind:'message'},86400));
         return reply({ok:true,message:{id:sent.id,sender_id:me.id,body,created_at:sent.created_at}});
       }
       return reply({error:'Endpoint chat tidak ditemukan.'},404);
     }
     if(path.startsWith('/api/media/')||path.startsWith('/api/calls/')) {
       const me=await userSession(request,env);
-      const extra=await handleExtra(request,env,me,{readJSON,limit,allowOrigin});
+      const extra=await handleExtra(request,env,me,{readJSON,limit,allowOrigin,sendPush:(user,payload,ttl)=>ctx?.waitUntil(sendPush(env,user,payload,ttl))});
       if(extra)return extra;
     }
     if(path.startsWith('/api/'))return reply({error:'Endpoint tidak ditemukan'},404);
@@ -323,5 +330,19 @@ export default {
     return reply({error:'Terjadi masalah server.',errorId},500);
   }
  },
- async scheduled(_event,env,ctx){ctx.waitUntil(cleanup(env));}
+ async scheduled(event,env,ctx){
+   ctx.waitUntil((async()=>{
+    // Tiap menit: panggilan tidak dijawab ditandai sekali; trigger hanya pada perubahan status.
+    if(event.cron==='* * * * *'){
+      await ensureExtras(env);
+      const missed=await env.DB.prepare(`UPDATE tc_call_sessions SET status='missed',updated_at=CURRENT_TIMESTAMP
+        WHERE status='ringing' AND created_at<datetime('now','-90 seconds')
+        RETURNING id,callee_id,caller_id,chat_id`).all();
+      for(const c of missed.results){
+        const caller=await env.DB.prepare('SELECT display_name FROM users WHERE id=?').bind(c.caller_id).first();
+        await sendPush(env,c.callee_id,{title:'Panggilan tak terjawab',body:'Panggilan dari '+(caller?.display_name||'Teman'),url:'/?chat='+c.chat_id,tag:'tc-missed-'+c.id},86400);
+      }
+    }else await cleanup(env);
+   })());
+  }
 };
