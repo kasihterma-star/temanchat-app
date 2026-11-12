@@ -1,0 +1,8 @@
+TemanChat V6.1 — Perbaikan tombol login Turnstile.
+Cara update melalui GitHub Desktop:
+1. Ekstrak ZIP ini.
+2. Salin semua ISI hasil ekstraksi ke Documents\GitHub\temanchat-app, pilih Replace.
+3. Di GitHub Desktop periksa Changes, Commit, lalu Push origin.
+4. Tunggu deployment Cloudflare Ready.
+5. Reload halaman login (Ctrl+Shift+R).
+Tidak perlu migrasi database atau mengubah secrets.

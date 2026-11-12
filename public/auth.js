@@ -1,6 +1,21 @@
 'use strict';
 const $=id=>document.getElementById(id);
 let mode='login',widgetId=null,ready=false,submitting=false,registered=false;
+const labels={login:'Masuk',register:'Daftar akun',forgot:'Kirim link reset',resend:'Kirim ulang verifikasi',reset:'Ganti password'};
+function updateSubmitButton(){
+ const button=$('submitBtn');
+ if(!button)return;
+ button.disabled=registered||submitting||!ready;
+ button.textContent=submitting?'Memproses...':ready?labels[mode]:'Menyiapkan keamanan...';
+}
+function refreshSecurityStatus(){
+ if(registered||submitting||widgetId===null||!window.turnstile)return;
+ let token='';
+ try{token=window.turnstile.getResponse(widgetId)||'';}catch{}
+ const valid=Boolean(token);
+ if(valid!==ready){ready=valid;updateSubmitButton();}
+}
+
 const params=new URLSearchParams(location.search);
 function note(text,error=false){const n=$('notice');n.textContent=text;n.hidden=false;n.classList.toggle('error',error)}
 function switchMode(next){
@@ -12,10 +27,10 @@ function switchMode(next){
  $('displayName').required=next==='register';$('username').required=next==='register';
  $('passwordLabel').textContent=next==='reset'?'Password baru':'Password';
  $('password').autocomplete=next==='login'?'current-password':'new-password';
- $('submitBtn').textContent=({login:'Masuk',register:'Daftar akun',forgot:'Kirim link reset',resend:'Kirim ulang verifikasi',reset:'Ganti password'})[mode];
+ updateSubmitButton();
  $('forgotBtn').hidden=['forgot','resend','reset'].includes(next);
  $('resendBtn').hidden=['forgot','resend','reset'].includes(next);
- $('notice').hidden=true;ready=false;$('submitBtn').disabled=true;
+ $('notice').hidden=true;ready=false;updateSubmitButton();
  if(widgetId!==null&&window.turnstile)window.turnstile.reset(widgetId);
 }
 function registerSuccess(address){
@@ -41,15 +56,19 @@ async function initTurnstile(){
   if(!window.turnstile)throw Error('Komponen Turnstile gagal dimuat.');
   widgetId=window.turnstile.render('#turnstile',{
    sitekey:d.siteKey,theme:'light',
-   callback:token=>{if(!token||registered)return;ready=true;$('submitBtn').disabled=submitting;$('notice').hidden=true;},
-   'error-callback':code=>{ready=false;$('submitBtn').disabled=true;note('Verifikasi keamanan gagal (kode '+code+'). Periksa hostname Turnstile.',true);return true;},
-   'expired-callback':()=>{ready=false;$('submitBtn').disabled=true;note('Verifikasi kedaluwarsa. Ulangi pemeriksaan.',true)},
-   'timeout-callback':()=>{ready=false;$('submitBtn').disabled=true;note('Pemeriksaan keamanan terlalu lama.',true)}
+   callback:token=>{if(!token||registered)return;ready=true;updateSubmitButton();$('notice').hidden=true;},
+   'error-callback':code=>{ready=false;updateSubmitButton();note('Verifikasi keamanan gagal (kode '+code+'). Periksa hostname Turnstile.',true);return true;},
+   'expired-callback':()=>{ready=false;updateSubmitButton();note('Verifikasi kedaluwarsa. Ulangi pemeriksaan.',true)},
+   'timeout-callback':()=>{ready=false;updateSubmitButton();note('Pemeriksaan keamanan terlalu lama.',true)}
   });
+  // Beberapa browser menampilkan Success sebelum callback sampai ke UI.
+  // Sinkronisasi ini mencegah tombol terkunci karena callback yang terlewat.
+  refreshSecurityStatus();
  }catch(e){note(e.message||'Komponen keamanan belum siap.',true)}
 }
 $('authForm').onsubmit=async event=>{
  event.preventDefault();if(submitting||registered)return;
+ refreshSecurityStatus();
  const token=widgetId!==null?window.turnstile?.getResponse(widgetId):'';
  if(!ready||!token){note('Selesaikan pemeriksaan keamanan terlebih dahulu.',true);return}
  const data={turnstileToken:token};if(mode!=='reset')data.email=$('email').value.trim();
@@ -59,7 +78,7 @@ $('authForm').onsubmit=async event=>{
  if(mode==='reset')data.token=params.get('reset');
  if(typeof data.password==='string'&&data.password.length<8){note('Password minimal 8 karakter.',true);return}
  const endpoint=({login:'login',register:'register',forgot:'forgot',resend:'resend-verification',reset:'reset'})[mode];
- submitting=true;$('submitBtn').disabled=true;
+ submitting=true;updateSubmitButton();
  try{
   const r=await fetch('/api/auth/'+endpoint,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Permintaan tidak berhasil.');
@@ -68,7 +87,10 @@ $('authForm').onsubmit=async event=>{
   if(mode==='reset'){$('password').value='';switchMode('login');note('Password berhasil diganti. Silakan masuk.');return}
   note(d.message||'Permintaan berhasil.');
  }catch(e){note(e.message||'Terjadi masalah server.',true)}
- finally{ready=false;submitting=false;$('submitBtn').disabled=true;if(widgetId!==null)window.turnstile?.reset(widgetId)}
+ finally{ready=false;submitting=false;updateSubmitButton();if(widgetId!==null)window.turnstile?.reset(widgetId)}
 };
 if(params.has('reset'))switchMode('reset');else if(params.has('verified'))note('Email berhasil diverifikasi. Silakan masuk.');else if(params.has('error'))note('Periksa koneksi internet, lalu coba lagi.',true);
+updateSubmitButton();
 initTurnstile();
+// Cadangan untuk kasus visual Turnstile sukses tetapi callback terlambat.
+setInterval(refreshSecurityStatus,600);

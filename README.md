@@ -92,3 +92,7 @@ wrangler.jsonc            Config Cloudflare Workers/D1/Cron; R2 opsional
 migrations/02-v6-extras.sql   Referensi SQL, Worker menginisialisasi otomatis
 wrangler-media-ready.jsonc    Template config siap tempel jika bucket R2 tersedia
 ```
+
+
+## Perbaikan 6.1 (12 November 2026)
+Login Turnstile: label tombol otomatis menyesuaikan status dan pemeriksaan token secara berkala mengatasi kondisi widget 'Success' tetapi tombol tetap disabled. Tidak ada perubahan pada tabel D1.
