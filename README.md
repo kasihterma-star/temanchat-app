@@ -1,3 +1,17 @@
+# Pembaruan TemanChat V6.7 (beta)
+
+Paket ini melanjutkan **V6.6**. Lihat `PANDUAN-V6.7.txt` untuk pemasangan.
+
+- Web Push: penerima yang sah mengirim ACK `/api/chat/push-delivered` saat Service Worker memproses pesan. Centang dua tidak dijamin jika sesi cookie tidak tersedia pada background.
+- Badge ikon PWA: angka unread pada iOS jika didukung; Android menampilkan sesuai launcher.
+- Pengaturan ON/OFF push benar-benar unsubscribe/resubscribe perangkat. Izin sistem OS tetap diatur melalui Settings.
+- Nada panggilan lokal berbeda antara outgoing dan incoming (hanya ketika aplikasi aktif).
+- UI transparansi glass, desktop responsif, gambar terbatasi ukuran layar, input tidak kehilangan fokus setelah mengirim.
+- Anti-spam: 100 pesan/menit, 50 pesan sama/menit, 10 pesan/5 detik.
+- Tidak memerlukan secret atau migrasi D1 baru; status masih menggunakan tabel yang sudah ada. R2/TURN tetap pilihan terpisah.
+
+---
+
 # TemanChat V6.6 — Web Push
 
 Perubahan utama adalah Web Push berbasis VAPID dan enkripsi RFC8291. Lihat `PANDUAN-V6.6-WEB-PUSH.txt`.

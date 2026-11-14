@@ -1,0 +1,15 @@
+TemanChat V6.7 — satu paket pengganti dari V6.6
+
+1. Salin SELURUH isi folder ke Documents\GitHub\temanchat-app; Replace.
+2. GitHub Desktop -> Commit -> Push origin; tunggu Cloudflare Ready.
+3. Di iPhone jalankan dari Layar Utama. Perbarui PWA agar Service Worker v67 aktif.
+4. Uji dua akun dan dua perangkat: pesan masuk saat app tidak dibuka -> notifikasi -> centang dua sesudah SW berhasil mengakui.
+5. Buka chat -> centang biru; badge menghilang sesudah sinkronisasi.
+6. Pengaturan -> Aktifkan/Matikan notifikasi dan suara panggilan. OFF menonaktifkan push perangkat itu, bukan izin sistem OS.
+7. Tone panggilan hanya ketika TemanChat aktif; background tetap tergantung ringtone OS.
+8. Badge angka di iPhone bergantung dukungan PWA; Android bisa titik atau angka sesuai launcher.
+9. R2 belum otomatis aktif; foto butuh bucket/binding. TURN belum otomatis aktif untuk beda jaringan.
+10. Spam: 100 pesan total per menit per akun; maks 50 isi sama per menit per chat; maks 10 dalam 5 detik.
+11. Tidak mengubah VAPID, D1, Resend, atau Turnstile. Jangan unggah secrets.
+
+Catatan: Notifikasi yang tiba bukan bukti pasti ACK berhasil. Jika sesi cookie gagal di service worker, status tetap 1 sampai aplikasi dibuka.

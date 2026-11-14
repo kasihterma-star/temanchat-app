@@ -71,3 +71,23 @@ input,textarea,select{font-size:16px!important}
  font-size:12px;font-weight:750;line-height:1;box-sizing:border-box}
 .tc-has-unread .contact-content b{font-weight:800}
 .tc-has-unread .contact-content p{font-weight:650}
+
+/* V6.7: kaca buram lembut ala antarmuka iOS modern; desktop tetap responsif. */
+:root{--tc-glass:rgba(255,255,255,.70);--tc-border:rgba(255,255,255,.78)}
+body{background:radial-gradient(ellipse at 12% 13%,#d3ede6 0,transparent 42%),radial-gradient(ellipse at 87% 86%,#d5dff4 0,transparent 45%),#eaf3f1}
+#app{width:min(1450px,calc(100vw - 24px));height:min(850px,calc(100dvh - 26px));border:1px solid var(--tc-border);border-radius:27px;overflow:hidden;background:rgba(255,255,255,.50);box-shadow:0 20px 72px #204d4a20, inset 0 1px 0 #fff;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.sidebar{background:rgba(255,255,255,.65);border-right:1px solid #ffffffb2}
+.conversation{background:rgba(248,252,250,.47)}
+.chathead,.compose{background:rgba(255,255,255,.66);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-color:#ffffffab}
+.messages{background-color:rgba(250,253,251,.18);min-width:0;overflow-x:hidden}
+.search,.compose input,.contact,.mode{border-radius:17px}
+.search,.compose input{background:rgba(242,248,245,.85);box-shadow:inset 0 1px 3px #19513f0d}
+.contact.active{background:rgba(209,240,227,.72)}
+.bubble{max-width:min(80%,620px);overflow-wrap:anywhere}
+.tc-bubble-media{max-width:100%;min-width:0}
+.tc-preview,.tc-preview img,.tc-preview video{max-width:100%;max-height:min(65dvh,560px);object-fit:contain;height:auto}
+.tc-preview img,.tc-preview video{display:block;max-width:min(100%,560px)}
+button{touch-action:manipulation}
+@media(max-width:740px){body{background:#f7fbf9}#app{width:100%;height:100dvh;max-height:100dvh;border-radius:0;border:0}.bubble{max-width:84%}.tc-preview img,.tc-preview video{max-height:48dvh}}
+@media(prefers-reduced-transparency:reduce){#app,.sidebar,.chathead,.compose{backdrop-filter:none;-webkit-backdrop-filter:none;background:#fff}}
+@media(min-width:741px){body{padding:0!important;min-height:100dvh;display:flex;align-items:center;justify-content:center}#app{width:calc(100vw - 24px);max-width:1800px;height:calc(100dvh - 24px);max-height:1000px}}

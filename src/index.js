@@ -284,6 +284,23 @@ export default {
         const state=await env.DB.prepare('SELECT delivered_id,read_id FROM tc_chat_receipts WHERE chat_id=? AND user_id=?').bind(id,other).first();
         return reply({ok:true,deliveredId:state?.delivered_id||0,readId:state?.read_id||0});
       }
+      // V6.7: pengakuan pengiriman dari Service Worker penerima yang sah.
+      // Tidak menandai dibaca dan tidak menerima ID pesan milik pengirim sendiri.
+      if(path==='/api/chat/push-delivered'&&request.method==='POST'){
+        let d;try{d=await readJSON(request,1500)}catch{return reply({error:'Parameter tidak valid'},400)}
+        const id=clean(d.conversationId),messageId=Number(d.messageId);
+        if(!/^[0-9a-f-]{36}$/.test(id)||!Number.isSafeInteger(messageId)||messageId<1)return reply({error:'ID tidak valid'},400);
+        const valid=await env.DB.prepare(`SELECT m.id FROM tc_direct_messages m
+          JOIN tc_direct_chats c ON c.id=m.chat_id
+          WHERE m.id=? AND m.chat_id=? AND m.sender_id<>? AND (c.user_a=? OR c.user_b=?)`)
+          .bind(messageId,id,me.id,me.id,me.id).first();
+        if(!valid)return reply({error:'Pesan tidak ditemukan'},404);
+        await ensureReceiptSchema(env);
+        await env.DB.prepare(`INSERT INTO tc_chat_receipts(chat_id,user_id,delivered_id) VALUES(?,?,?)
+          ON CONFLICT(chat_id,user_id) DO UPDATE SET delivered_id=MAX(tc_chat_receipts.delivered_id,excluded.delivered_id),updated_at=CURRENT_TIMESTAMP`)
+          .bind(id,me.id,messageId).run();
+        return reply({ok:true,deliveredId:messageId});
+      }
       if(path==='/api/chat/read'&&request.method==='POST'){
         let d;try{d=await readJSON(request)}catch{return reply({error:'Permintaan tidak valid'},400)}
         const id=clean(d.conversationId),last=Number(d.lastMessageId);
@@ -305,14 +322,30 @@ export default {
         if(!/^[0-9a-f-]{36}$/.test(id)||!body||body.length>1000)return reply({error:'Pesan wajib diisi, maksimal 1000 karakter.'},400);
         const access=await env.DB.prepare('SELECT id,user_a,user_b FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
         if(!access)return reply({error:'Percakapan tidak ditemukan.'},404);
-        if(!await limit(request,env,'chat-send',90))return reply({error:'Terlalu banyak pesan. Coba lagi nanti.'},429);
-        // Boleh bercanda dengan pesan sama, tetapi jangan mengulang berlebihan.
-        const repeatKey=await sha('repeat|'+me.id+'|'+id+'|'+Math.floor(Date.now()/10000)+'|'+body.toLowerCase()+'|'+env.TURNSTILE_SECRET_KEY);
-        const repeats=await env.DB.prepare('INSERT INTO auth_rate_limits(key,attempts,created_at) VALUES(?,1,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(repeatKey).first();
-        if(Number(repeats?.attempts)>10)return reply({error:'Pesan yang sama terlalu sering. Coba lagi dalam beberapa detik.'},429);
+        // V6.7: 100 pesan/menit, maksimal 50 pesan identik/menit, burst 10/5 detik.
+        // Buckets berbasis akun agar pergantian IP tidak menghindari batas.
+        const now=Date.now();
+        const rate=async(kind,bucket,maximum)=>{
+          const key=await sha('tc67|'+me.id+'|'+kind+'|'+bucket+'|'+env.TURNSTILE_SECRET_KEY);
+          const item=await env.DB.prepare('INSERT INTO auth_rate_limits(key,attempts,created_at) VALUES(?,1,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(key).first();
+          return Number(item?.attempts||0)<=maximum;
+        };
+        if(!await rate('all',Math.floor(now/60000),100))return reply({error:'Batas 100 pesan per menit. Coba lagi sebentar.'},429);
+        if(!await rate('burst',Math.floor(now/5000),10))return reply({error:'Terlalu cepat. Tunggu beberapa detik sebelum mengirim lagi.'},429);
+        const bodyHash=await sha(body.toLocaleLowerCase('id-ID'));
+        if(!await rate('repeat:'+id+':'+bodyHash,Math.floor(now/60000),50))return reply({error:'Pesan sama sudah dikirim 50 kali dalam satu menit. Coba lagi nanti.'},429);
         const sent=await env.DB.prepare('INSERT INTO tc_direct_messages(chat_id,sender_id,body) VALUES(?,?,?) RETURNING id,created_at').bind(id,me.id,body).first();
         const recipientId=access.user_a===me.id?access.user_b:access.user_a;
-        ctx?.waitUntil(sendPush(env,recipientId,{title:'TemanChat',body:'Pesan baru dari '+me.display_name,url:'/?chat='+encodeURIComponent(id),tag:'tc-message-'+id+'-'+sent.id,kind:'message'},86400));
+        // Jumlah unread dari D1 agar angka badge bukan sekadar jumlah notifikasi yang diterima.
+        await ensureReceiptSchema(env);
+        const badgeRow=await env.DB.prepare(`SELECT COUNT(*) AS n FROM tc_direct_messages m
+          JOIN tc_direct_chats c ON c.id=m.chat_id
+          LEFT JOIN tc_chat_receipts r ON r.chat_id=m.chat_id AND r.user_id=?
+          WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id<>? AND m.id>COALESCE(r.read_id,0)`)
+          .bind(recipientId,recipientId,recipientId,recipientId).first();
+        ctx?.waitUntil(sendPush(env,recipientId,{title:'TemanChat',body:'Pesan baru dari '+me.display_name,
+          url:'/?chat='+encodeURIComponent(id),tag:'tc-message-'+id+'-'+sent.id,kind:'message',
+          conversationId:id,messageId:sent.id,unreadCount:Number(badgeRow?.n||0)},86400));
         return reply({ok:true,message:{id:sent.id,sender_id:me.id,body,created_at:sent.created_at}});
       }
       return reply({error:'Endpoint chat tidak ditemukan.'},404);

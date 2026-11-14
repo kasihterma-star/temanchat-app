@@ -1,6 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-const CACHE='temanchat-v66-static';
-const ASSETS=['/style.css?v=6.6','/v6.css?v=6.6','/app.js?v=6.6','/storage.js?v=6.6','/config.js?v=6.6','/auth.css?v=6.6','/auth.js?v=6.6','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
+const CACHE='temanchat-v67-static';
+const ASSETS=['/style.css?v=6.7','/v6.css?v=6.7','/app.js?v=6.7','/storage.js?v=6.7','/config.js?v=6.7','/auth.css?v=6.7','/auth.js?v=6.7','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
@@ -22,11 +22,24 @@ self.addEventListener('push',event=>{
  let d={title:'TemanChat',body:'Ada pesan baru',url:'/',tag:'tc-event'};
  try{if(event.data)d={...d,...event.data.json()};}catch{}
  const safeUrl=typeof d.url==='string'&&d.url.startsWith('/')&&!d.url.startsWith('//')?d.url:'/';
- event.waitUntil(self.registration.showNotification(String(d.title||'TemanChat').slice(0,90),{
-  body:String(d.body||'Ada aktivitas baru').slice(0,180),
-  icon:'/icons/icon-192.png',badge:'/icons/icon-192.png',tag:String(d.tag||'tc-event'),
-  data:{url:safeUrl},renotify:true
- }));
+ event.waitUntil((async()=>{
+  // Acknowledge hanya bila push benar-benar diproses pada perangkat yang memiliki sesi penerima.
+  // Tidak menandai pesan sebagai "dibaca".
+  const tasks=[];
+  if(d.kind==='message'&&typeof d.conversationId==='string'&&Number.isSafeInteger(Number(d.messageId))){
+   tasks.push(fetch('/api/chat/push-delivered',{method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({conversationId:d.conversationId,messageId:d.messageId})})
+    .then(r=>{if(!r.ok)console.warn('Delivery acknowledgement',r.status)}).catch(e=>console.warn('Delivery ack',e)));
+  }
+  if(Number.isFinite(Number(d.unreadCount))&&typeof self.registration.setAppBadge==='function'){
+   tasks.push(Promise.resolve().then(()=>Number(d.unreadCount)>0?self.registration.setAppBadge(Number(d.unreadCount)):self.registration.clearAppBadge()).catch(()=>{}));
+  }
+  tasks.push(self.registration.showNotification(String(d.title||'TemanChat').slice(0,90),{
+   body:String(d.body||'Ada aktivitas baru').slice(0,180),icon:'/icons/icon-192.png',
+   badge:'/icons/icon-192.png',tag:String(d.tag||'tc-event'),data:{url:safeUrl},renotify:true
+  }));
+  await Promise.allSettled(tasks);
+ })());
 });
 self.addEventListener('notificationclick',event=>{
  event.notification.close();

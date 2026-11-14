@@ -32,6 +32,10 @@ async function notifyLocal(title,body,tag){
 
 // V6.6 Web Push: izin diminta HANYA setelah ketukan tombol di Pengaturan.
 let serverPushEnabled=false;
+const audioPreference=()=>localStorage.getItem('tc_call_sounds')!=='off';
+const badgeAPI=('setAppBadge' in navigator);
+async function syncAppBadge(n){try{if(!badgeAPI)return;const count=Math.max(0,Number(n)||0);if(count)await navigator.setAppBadge(count);else if(navigator.clearAppBadge)await navigator.clearAppBadge();}catch(e){console.warn('Badge system',e.message)}}
+
 const fromB64url=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)),c=>c.charCodeAt(0));
 async function registerPush(){
  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!notifySupported())throw Error('Perangkat atau browser tidak mendukung Web Push. Di iPhone buka aplikasi dari Layar Utama.');
@@ -132,6 +136,7 @@ async function fetchChats(){
   }
   for(const id of [...previousUnread.keys()])if(!chats.some(c=>c.id===id))previousUnread.delete(id);
   document.title=totalUnread>0?'('+totalUnread+') '+BASE_TITLE:BASE_TITLE;
+  void syncAppBadge(totalUnread);
   notificationBaselineReady=true;
 
   if(active){const now=chats.find(c=>c.id===active.id);if(now)active=now;}
@@ -249,9 +254,9 @@ $('search').addEventListener('input',async()=>{
 });
 $('messageForm').addEventListener('submit',async e=>{
  e.preventDefault();const input=$('messageInput'),msg=input.value.trim(),id=active?.id;
- if(!id||!msg||msg.length>1000)return;input.disabled=true;
+ if(!id||!msg||msg.length>1000)return;const sendBtn=document.querySelector('.send');sendBtn.disabled=true;
  try{const d=await post('/api/chat/send',{conversationId:id,body:msg});input.value='';if(active?.id===id){if($('messages').querySelector('.day'))$('messages').replaceChildren();addMessage({...d.message,delivery_status:'sent'})}await fetchChats();}
- catch(e){toast(e.message)}finally{input.disabled=!active}
+ catch(e){toast(e.message)}finally{sendBtn.disabled=!active;if(active?.id===id&&!document.hidden){try{input.focus({preventScroll:true})}catch{input.focus()}}}
 });
 $('attachmentInput').addEventListener('change',async()=>{
  const file=$('attachmentInput').files[0],id=active?.id;$('attachmentInput').value='';if(!file||!id)return;
@@ -303,14 +308,33 @@ $('settingsBtn').onclick=()=>{
  wrap.append(label,select,element('small','Foto dikirim dari perangkat, bukan dipilih dari Google Drive. Cache cloud dibersihkan 3 hari setelah backup berhasil; mode lokal tidak ikut dibersihkan otomatis.'));
  if(!TCS.getClientId())wrap.append(element('small','','Integrasi Google Drive belum dikonfigurasi. Sampai disiapkan, gunakan Lokal.'));
  else {const connect=element('button','primary','Hubungkan Google Drive');connect.onclick=async()=>{try{await TCS.connectGoogle();toast('Google Drive terhubung untuk sesi browser ini.')}catch(e){toast(e.message)}};wrap.append(connect)}
- const notifyButton=element('button','primary','Aktifkan notifikasi Web Push');
- notifyButton.onclick=async()=>{
-  notifyButton.disabled=true;notifyButton.textContent='Mengaktifkan…';
-  try{await registerPush();notifyButton.textContent='Notifikasi Web Push aktif ✓';toast('Notifikasi aktif, termasuk saat PWA ditutup jika diizinkan sistem.');}
-  catch(e){notifyButton.textContent='Aktifkan notifikasi Web Push';toast(e.message)}
-  finally{notifyButton.disabled=false}
+ const notifyButton=element('button','primary','Memeriksa notifikasi…');
+ const showPushState=async()=>{
+   let enabled=false;
+   try{const reg=await navigator.serviceWorker?.getRegistration('/');const sub=await reg?.pushManager?.getSubscription();
+       enabled=!!sub&&Notification.permission==='granted'&&serverPushEnabled;
+   }catch{}
+   notifyButton.textContent=enabled?'Matikan notifikasi Web Push':'Aktifkan notifikasi Web Push';
+   notifyButton.setAttribute('aria-pressed',String(enabled));
+   notifyButton.dataset.enabled=enabled?'true':'false';
  };
- wrap.append(notifyButton,element('small','','Di iPhone: jalankan TemanChat dari ikon Layar Utama dan izinkan notifikasi. Pengiriman saat aplikasi ditutup menggunakan Web Push.'));
+ notifyButton.onclick=async()=>{
+  notifyButton.disabled=true;
+  try{
+    if(notifyButton.dataset.enabled==='true'){
+      const reg=await navigator.serviceWorker?.getRegistration('/');const sub=await reg?.pushManager?.getSubscription();
+      if(sub){await post('/api/push/unsubscribe',{endpoint:sub.endpoint});await sub.unsubscribe();}
+      serverPushEnabled=false;
+      toast('Notifikasi TemanChat dinonaktifkan pada perangkat ini.');
+    }else{await registerPush();toast('Notifikasi TemanChat diaktifkan pada perangkat ini.');}
+  }catch(e){toast('Pengaturan notifikasi gagal: '+e.message)}
+  finally{notifyButton.disabled=false;await showPushState()}
+ };
+ wrap.append(notifyButton,element('small','','ON/OFF berlaku untuk perangkat ini. Izin sistem tidak dapat dicabut lewat aplikasi; OFF membatalkan langganan push server.'));
+ void (async()=>{await checkPush();await showPushState()})();
+ const toneButton=element('button','primary',audioPreference()?'Suara panggilan: Aktif':'Suara panggilan: Nonaktif');
+ toneButton.onclick=()=>{const enabled=!audioPreference();localStorage.setItem('tc_call_sounds',enabled?'on':'off');toneButton.textContent='Suara panggilan: '+(enabled?'Aktif':'Nonaktif');if(!enabled)stopCallTone();};
+ wrap.append(toneButton);
  const pushTest=element('button','primary','Kirim notifikasi uji');
  pushTest.onclick=async()=>{try{const d=await post('/api/push/test',{});toast(d.sent?'Tes terkirim. Cek notifikasi perangkat.':'Push ditolak penyedia. Periksa Log Cloudflare.')}catch(e){toast(e.message)}};
  wrap.append(pushTest);
@@ -335,15 +359,35 @@ $('installBtn').onclick=async()=>{
  if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;return}
  modal('Instal TemanChat',/iPhone|iPad|iPod/.test(navigator.userAgent)?'Safari → Bagikan → Tambahkan ke Layar Utama.':'Chrome/Edge → menu ⋮ → Instal aplikasi / Tambahkan ke layar utama.');
 };
+// Nada panggilan original, hanya selama laman PWA aktif dan browser mengizinkan audio.
+let tcAudioContext=null,tcToneLoop=null;
+function stopCallTone(){if(tcToneLoop){clearInterval(tcToneLoop);tcToneLoop=null}}
+function toneBeep(freq=470,duration=.16,volume=.045){
+ try{if(!audioPreference())return;
+  tcAudioContext=tcAudioContext||new (window.AudioContext||window.webkitAudioContext)();
+  if(tcAudioContext.state==='suspended')void tcAudioContext.resume();
+  const o=tcAudioContext.createOscillator(),g=tcAudioContext.createGain(),t=tcAudioContext.currentTime;
+  o.type='sine';o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(.001,t);g.gain.exponentialRampToValueAtTime(volume,t+.018);g.gain.exponentialRampToValueAtTime(.001,t+duration);
+  o.connect(g);g.connect(tcAudioContext.destination);o.start(t);o.stop(t+duration+.03);
+ }catch(e){console.warn('Audio panggilan',e.message)}
+}
+function startCallTone(kind){
+ stopCallTone();if(!audioPreference())return;
+ const play=()=>{if(kind==='incoming'){toneBeep(620,.25);setTimeout(()=>{if(currentCall&&!currentCall.isCaller)toneBeep(800,.28)},340)}
+  else if(kind==='outgoing'){toneBeep(430,.22,.03)}};
+ play();tcToneLoop=setInterval(play,kind==='incoming'?2600:1900);
+}
 // --------- Panggilan suara dan video (WebRTC / signaling D1) ---------
-function callLabel(text){$('callState').textContent=text}
+function callLabel(text){$('callState').textContent=text;if(/Terhubung|Menghubungkan/.test(text))stopCallTone();}
 function showCallUI(kind,name,incoming){
  const dlg=$('callDialog');$('callName').textContent=name||'TemanChat';$('callAvatar').textContent=avatar(name);
  $('callRemote').style.display='flex';$('callAvatar').style.display='grid';$('remoteVideo').style.display='none';$('localVideo').style.display='none';
  $('acceptCall').hidden=!incoming;$('cameraCall').hidden=kind!=='video';callLabel(incoming?'Panggilan masuk…':'Memanggil…');
  if(!dlg.open)dlg.showModal();
+ startCallTone(incoming?'incoming':'outgoing');
 }
 function closeCallUI(){
+ stopCallTone();
  const dlg=$('callDialog');if(dlg.open)dlg.close();$('localVideo').srcObject=null;$('remoteVideo').srcObject=null;
  $('localVideo').style.display='none';$('remoteVideo').style.display='none';
 }
@@ -408,7 +452,7 @@ async function startCall(kind){
   showCallUI(kind,active.other_name,false);await preparePeer(c);if(currentCall!==c)return;
   const offer=await c.pc.createOffer();await c.pc.setLocalDescription(offer);
   await post('/api/calls/signal',{callId:c.id,kind:'offer',payload:JSON.stringify(c.pc.localDescription)});
-  toast('Panggilan dikirim. Penerima harus membuka TemanChat.');
+  toast('Panggilan dikirim. Penerima bisa menerima notifikasi push.');
  }catch(e){toast('Panggilan gagal: '+e.message);await hangup()}
 }
 $('voiceBtn').onclick=()=>startCall('audio');$('videoBtn').onclick=()=>startCall('video');
