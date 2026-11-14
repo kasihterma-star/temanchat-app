@@ -200,6 +200,14 @@ export default {
         ]);
         return reply({ok:true,message:'Password berhasil diganti. Silakan login kembali.'});
       }
+      if(path==='/api/auth/profile'){
+        const me=await userSession(request,env);
+        if(!me)return reply({error:'Sesi tidak tersedia.'},401);
+        const name=clean(d.displayName);
+        if(name.length<2||name.length>60||/[\x00-\x1f\x7f]/.test(name))return reply({error:'Nama panggilan harus 2–60 karakter.'},400);
+        await env.DB.prepare('UPDATE users SET display_name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(name,me.id).run();
+        return reply({ok:true,user:{...publicUser(me),display_name:name}});
+      }
       if(path==='/api/auth/logout'){
         const t=cookie(request,'tc_session');if(t&&/^[0-9a-f]{64}$/.test(t))await env.DB.prepare('UPDATE sessions SET revoked_at=CURRENT_TIMESTAMP WHERE token_hash=?').bind(await sha(t)).run();
         const r=reply({ok:true});r.headers.set('Set-Cookie',sessionCookie('',0));return r;

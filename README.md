@@ -1,3 +1,25 @@
+# TemanChat V6.8 — Glass Terang/Gelap + Nama Panggilan + Panggilan
+
+Paket lengkap berdasarkan V6.7.1, mempertahankan Web Push, status pesan, dan pengaturan anti-spam.
+
+- **Nama panggilan akun:** Pengaturan → Nama panggilan saya, simpan 2–60 karakter. Mengubah `users.display_name`, **bukan** `@username`/email. Teman mendapat nama terbaru setelah daftar percakapan disegarkan.
+- **Tema:** Pengaturan → Tampilan TemanChat → Ikuti sistem / Terang Glass / Gelap Glass. Pilihan disimpan pada perangkat.
+- **Panggilan:** status *Memanggil* sampai perangkat penerima mengakui sinyal, lalu *Berdering*; *Terhubung* hanya sesudah sambungan WebRTC berhasil. Tanda Berdering artinya perangkat memproses push atau membuka aplikasi, bukan bukti speaker benar-benar berdering. Nada dering khusus dapat dibatasi oleh sistem saat PWA ditutup.
+- **Badge:** perbaikan pemanggilan Badging API di Service Worker, tanpa mengubah izin Web Push. Angka bergantung pada iOS/launcher Android dan pengiriman push.
+- **Fitur V6.7:** centang dua berdasarkan ACK, notifikasi ON/OFF, kursor tetap fokus, media responsif, batas anti-spam 100/menit dan 50 identik/menit.
+
+## Pemasangan
+
+1. Backup repository. Ekstrak ZIP. Salin **isi** paket ke folder repository `temanchat-app`, timpa file dengan nama sama. Jangan menghapus `.git`.
+2. GitHub Desktop → Commit `TemanChat V6.8 Glass Dark Profile Call` → Push origin.
+3. Tunggu Cloudflare berstatus Ready. Kunci VAPID, D1, dan akun **tidak perlu dibuat ulang**.
+4. Tes di iPhone PWA dan komputer: ganti tema, ubah nama tampilan, telepon antar akun, notifikasi push, centang dua, dan badge.
+
+## Batasan
+- Belum terbukti di perangkat nyata; perlu uji.
+- TURN masih diperlukan untuk sebagian panggilan beda jaringan, R2 untuk media.
+- Ringing ACK dibuat otomatis di tabel `tc_call_delivery` saat ada panggilan; tidak perlu menjalankan SQL manual.
+- Kunci VAPID privat jangan pernah diunggah ke GitHub.
 # Pembaruan TemanChat V6.7 (beta)
 
 Paket ini melanjutkan **V6.6**. Lihat `PANDUAN-V6.7.txt` untuk pemasangan.

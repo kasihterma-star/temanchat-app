@@ -14,7 +14,7 @@ assert(ui.includes('startCallTone(incoming?'));
 assert(css.includes('backdrop-filter:blur'));
 // Simulate service-worker push; assert that the ACK goes to the correct authenticated route.
 const events=new Map(),requests=[];let notices=0,badges=[];
-const self={registration:{showNotification:async()=>{notices++},setAppBadge:async n=>badges.push(n)},clients:{claim(){}} ,addEventListener:(n,cb)=>events.set(n,cb)};
+const self={registration:{showNotification:async()=>{notices++}},navigator:{setAppBadge:async n=>badges.push(n),clearAppBadge:async()=>badges.push(0)},clients:{claim(){}} ,addEventListener:(n,cb)=>events.set(n,cb)};
 const context={self,location:{origin:'https://chat.ege.my.id'},URL,console,JSON,Promise,Number,String,
  caches:{},fetch:async(url,opts)=>{requests.push({url,opts});return{ok:true,status:200}}};
 vm.runInNewContext(sw,context);

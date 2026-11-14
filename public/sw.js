@@ -1,6 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-const CACHE='temanchat-v67-static';
-const ASSETS=['/style.css?v=6.7','/v6.css?v=6.7','/app.js?v=6.7','/storage.js?v=6.7','/config.js?v=6.7','/auth.css?v=6.7','/auth.js?v=6.7','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
+const CACHE='temanchat-v68-glass-dark-profile';
+const ASSETS=['/style.css?v=6.8','/v6.css?v=6.8','/app.js?v=6.8','/storage.js?v=6.8','/config.js?v=6.8','/auth.css?v=6.8','/auth.js?v=6.8','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
@@ -31,8 +31,14 @@ self.addEventListener('push',event=>{
     headers:{'Content-Type':'application/json'},body:JSON.stringify({conversationId:d.conversationId,messageId:d.messageId})})
     .then(r=>{if(!r.ok)console.warn('Delivery acknowledgement',r.status)}).catch(e=>console.warn('Delivery ack',e)));
   }
-  if(Number.isFinite(Number(d.unreadCount))&&typeof self.registration.setAppBadge==='function'){
-   tasks.push(Promise.resolve().then(()=>Number(d.unreadCount)>0?self.registration.setAppBadge(Number(d.unreadCount)):self.registration.clearAppBadge()).catch(()=>{}));
+  if(d.kind==='call'&&typeof d.callId==='string'){
+    tasks.push(fetch('/api/calls/ringing-ack',{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({callId:d.callId})})
+      .then(r=>{if(!r.ok)console.warn('Call ringing acknowledgement',r.status)})
+      .catch(e=>console.warn('Call ringing ack',e)));
+  }
+  if(Number.isFinite(Number(d.unreadCount))&&typeof self.navigator?.setAppBadge==='function'){
+   tasks.push(Promise.resolve().then(()=>Number(d.unreadCount)>0?self.navigator.setAppBadge(Number(d.unreadCount)):self.navigator.clearAppBadge()).catch(()=>{}));
   }
   tasks.push(self.registration.showNotification(String(d.title||'TemanChat').slice(0,90),{
    body:String(d.body||'Ada aktivitas baru').slice(0,180),icon:'/icons/icon-192.png',

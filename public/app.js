@@ -9,6 +9,17 @@ let mediaEnabled=false,currentCall=null,checkingCalls=false,callBusy=false;
 let notificationBaselineReady=false;
 const previousUnread=new Map();
 const BASE_TITLE='TemanChat — Pesan';
+// Pilihan tema lokal: sistem, terang, atau gelap.
+const THEME_KEY='tc_theme';
+function applyTheme(choice){
+ const theme=['light','dark','system'].includes(choice)?choice:'system';
+ document.documentElement.dataset.theme=theme;
+ try{localStorage.setItem(THEME_KEY,theme)}catch{}
+ const dark=theme==='dark'||(theme==='system'&&matchMedia('(prefers-color-scheme:dark)').matches);
+ const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.content=dark?'#101c29':'#b7e6dc';
+}
+applyTheme(localStorage.getItem(THEME_KEY)||'system');
+
 const readAcknowledged=new Map();
 const seenChatLast=new Map();
 function notifySupported(){return 'Notification' in window&&window.isSecureContext}
@@ -302,6 +313,31 @@ $('callHistoryBtn').onclick=showCallHistory;
 $('settingsBtn').onclick=()=>{
  modal('Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
+ // Nama tampilan dapat diganti, username login tidak berubah.
+ const profileTitle=element('label','','Nama panggilan saya');
+ const profileInput=element('input');profileInput.type='text';profileInput.maxLength=60;profileInput.minLength=2;
+ profileInput.placeholder='Nama yang terlihat oleh teman';profileInput.value=me?.display_name||'';
+ profileInput.autocomplete='nickname';profileInput.setAttribute('aria-label','Ubah nama panggilan');
+ const saveName=element('button','primary','Simpan nama panggilan');
+ saveName.onclick=async()=>{
+   const name=profileInput.value.trim();if(name.length<2||name.length>60){toast('Nama harus 2–60 karakter.');return}
+   saveName.disabled=true;
+   try{const d=await post('/api/auth/profile',{displayName:name});me=d.user;
+     document.querySelector('.profile b').textContent=me.display_name;
+     document.querySelector('.profile .avatar').textContent=avatar(me.display_name);
+     $('modalDesc').textContent=`${me.display_name} (@${me.username})`;
+     toast('Nama panggilan berhasil diperbarui.');
+   }catch(e){toast(e.message)}finally{saveName.disabled=false}
+ };
+ wrap.append(profileTitle,profileInput,saveName,element('small','','Nama panggilan terlihat oleh teman. @username dan email login tidak berubah.'));
+ const themeTitle=element('label','','Tampilan TemanChat');
+ const themeSelect=element('select');
+ for(const [value,text] of [['system','Ikuti sistem'],['light','Terang · Glass'],['dark','Gelap · Glass']]){
+  const opt=element('option','',text);opt.value=value;themeSelect.append(opt);
+ }
+ themeSelect.value=localStorage.getItem(THEME_KEY)||'system';themeSelect.onchange=()=>applyTheme(themeSelect.value);
+ wrap.append(themeTitle,themeSelect,element('small','','Efek kaca disesuaikan dengan tema, kontras, dan pengaturan aksesibilitas perangkat.'));
+
  const select=element('select');
  for(const [v,t] of [['local','Lokal perangkat'],['google_drive','Google Drive pribadi']]){const o=element('option','',t);o.value=v;select.append(o)}
  select.value=TCS.pref();select.onchange=()=>{TCS.setPref(select.value);toast(select.value==='local'?'Penyimpanan lokal dipilih. Media di browser bisa hilang bila data situs dihapus.':'Google Drive dipilih. Backup butuh izin Google dan Wi-Fi yang bisa diverifikasi.')};
@@ -374,8 +410,8 @@ function toneBeep(freq=470,duration=.16,volume=.045){
 function startCallTone(kind){
  stopCallTone();if(!audioPreference())return;
  const play=()=>{if(kind==='incoming'){toneBeep(620,.25);setTimeout(()=>{if(currentCall&&!currentCall.isCaller)toneBeep(800,.28)},340)}
-  else if(kind==='outgoing'){toneBeep(430,.22,.03)}};
- play();tcToneLoop=setInterval(play,kind==='incoming'?2600:1900);
+  else if(kind==='outgoing'){toneBeep(430,.22,.03)}else if(kind==='ringback'){toneBeep(460,.32,.035);setTimeout(()=>{if(currentCall?.isCaller&&currentCall.ringingConfirmed)toneBeep(460,.32,.035)},520)}};
+ play();tcToneLoop=setInterval(play,kind==='incoming'?2600:kind==='ringback'?2700:1900);
 }
 // --------- Panggilan suara dan video (WebRTC / signaling D1) ---------
 function callLabel(text){$('callState').textContent=text;if(/Terhubung|Menghubungkan/.test(text))stopCallTone();}
@@ -426,6 +462,7 @@ async function pollCall(){
   const state=await api('/api/calls/state?callId='+encodeURIComponent(c.id));
   if(currentCall!==c)return;
   if(['declined','ended','missed'].includes(state.call.status)){toast('Panggilan selesai.');stopCallLocally();return}
+  if(c.isCaller&&state.call.status==='ringing'&&state.call.delivered&&!c.ringingConfirmed){c.ringingConfirmed=true;callLabel('Berdering…');stopCallTone();startCallTone('ringback');}
   const d=await api('/api/calls/signals?callId='+encodeURIComponent(c.id)+'&after='+c.lastSignal);
   if(currentCall!==c)return;
   for(const s of d.signals){
@@ -443,6 +480,7 @@ async function pollCall(){
  }catch(e){console.warn('Call polling',e.message)}
 }
 async function startCall(kind){
+ try{if(tcAudioContext?.state==='suspended')await tcAudioContext.resume()}catch{}
  if(!active)return toast('Pilih teman terlebih dahulu.');
  if(currentCall)return toast('Masih ada panggilan aktif.');
  if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)return toast('Browser ini belum mendukung WebRTC atau izin mikrofon/kamera.');

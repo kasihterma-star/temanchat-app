@@ -1,0 +1,5 @@
+TemanChat V6.7.1 — Glass UI lebih jelas
+
+Perubahan: public/v6.css, public/index.html, public/sw.js. Kode chat, VAPID, database, dan panggilan tidak diubah.
+
+Cara pasang: ekstrak ZIP, copy seluruh isinya ke folder repository di Documents/GitHub/temanchat-app, pilih Replace, lalu Commit dan Push GitHub Desktop. Uji tampilan setelah Cloudflare Ready; pada PWA iPhone tutup aplikasi dari app switcher lalu buka kembali agar cache terbaru termuat.

@@ -91,3 +91,110 @@ button{touch-action:manipulation}
 @media(max-width:740px){body{background:#f7fbf9}#app{width:100%;height:100dvh;max-height:100dvh;border-radius:0;border:0}.bubble{max-width:84%}.tc-preview img,.tc-preview video{max-height:48dvh}}
 @media(prefers-reduced-transparency:reduce){#app,.sidebar,.chathead,.compose{backdrop-filter:none;-webkit-backdrop-filter:none;background:#fff}}
 @media(min-width:741px){body{padding:0!important;min-height:100dvh;display:flex;align-items:center;justify-content:center}#app{width:calc(100vw - 24px);max-width:1800px;height:calc(100dvh - 24px);max-height:1000px}}
+
+
+/* ===== TemanChat 6.7.1: GLASS VISIBLE — seluruh layar, tanpa mengubah fitur ===== */
+:root{--tc-glass-border:rgba(255,255,255,.72);--tc-glass-shadow:0 16px 45px rgba(22,69,70,.13)}
+html{background:#cbe5e3}
+body{background:
+  radial-gradient(circle at 11% 11%,rgba(69,190,155,.48),transparent 37%),
+  radial-gradient(circle at 94% 14%,rgba(136,156,242,.48),transparent 37%),
+  radial-gradient(circle at 79% 86%,rgba(255,165,188,.43),transparent 34%),
+  radial-gradient(circle at 10% 91%,rgba(130,215,238,.54),transparent 35%),
+  linear-gradient(127deg,#e0f6eb,#e8e9fa 55%,#ffe5e9)!important;
+  background-attachment:fixed!important;
+}
+#app{
+  background:rgba(255,255,255,.26)!important;
+  border:1px solid rgba(255,255,255,.85)!important;
+  box-shadow:0 26px 85px rgba(31,73,90,.23), inset 0 1px rgba(255,255,255,.85)!important;
+  -webkit-backdrop-filter:blur(26px) saturate(165%)!important;
+  backdrop-filter:blur(26px) saturate(165%)!important;
+  isolation:isolate;
+}
+.sidebar{
+  background:linear-gradient(150deg,rgba(255,255,255,.69),rgba(229,252,245,.37))!important;
+  -webkit-backdrop-filter:blur(28px) saturate(180%)!important;
+  backdrop-filter:blur(28px) saturate(180%)!important;
+  border-right:1px solid rgba(255,255,255,.80)!important;
+}
+.conversation{background:linear-gradient(150deg,rgba(255,255,255,.22),rgba(239,249,255,.12))!important}
+.messages{
+  background:radial-gradient(circle at 18% 22%,rgba(148,209,213,.22),transparent 43%),
+             radial-gradient(circle at 87% 76%,rgba(212,173,243,.18),transparent 44%)!important;
+}
+.brand-icon,.send{
+  background:linear-gradient(145deg,#16b39a,#0a7167 70%,#124e62)!important;
+  box-shadow:0 9px 20px rgba(13,133,112,.24),inset 0 1px rgba(255,255,255,.35)!important;
+}
+.chathead,.compose,.profile{
+  background:linear-gradient(115deg,rgba(255,255,255,.69),rgba(255,255,255,.39))!important;
+  -webkit-backdrop-filter:blur(25px) saturate(175%)!important;
+  backdrop-filter:blur(25px) saturate(175%)!important;
+  border-color:rgba(255,255,255,.76)!important;
+}
+.contact{background:transparent!important;border-radius:18px;margin:3px 10px;width:calc(100% - 20px);padding:14px!important;border:1px solid transparent!important;transition:background .15s,border-color .15s}
+.contact:hover,.contact.active{background:rgba(255,255,255,.53)!important;border-color:rgba(255,255,255,.83)!important;box-shadow:0 4px 15px rgba(51,91,110,.07)!important}
+.search,.compose input,.mode{
+  background:rgba(255,255,255,.45)!important;
+  border:1px solid rgba(255,255,255,.88)!important;
+  -webkit-backdrop-filter:blur(14px) saturate(150%);
+  backdrop-filter:blur(14px) saturate(150%);
+  box-shadow:inset 0 1px rgba(255,255,255,.88),0 5px 14px rgba(40,86,98,.06)!important;
+}
+.round{border:1px solid rgba(255,255,255,.52)!important;background:rgba(255,255,255,.29)!important;box-shadow:inset 0 1px rgba(255,255,255,.5)}
+.round:hover{background:rgba(255,255,255,.63)!important}
+.bubble.them{background:rgba(255,255,255,.82)!important;border:1px solid rgba(255,255,255,.85)!important;box-shadow:0 6px 21px rgba(43,84,95,.08)!important}
+.bubble.me{background:linear-gradient(135deg,rgba(190,243,221,.91),rgba(207,244,234,.78))!important;border:1px solid rgba(255,255,255,.74)!important;box-shadow:0 6px 21px rgba(43,84,95,.09)!important}
+.avatar.teal,.avatar.self{background:linear-gradient(140deg,rgba(165,225,205,.95),rgba(208,242,234,.76))!important;border:1px solid rgba(255,255,255,.78)}
+dialog:not(.call-dialog){background:linear-gradient(145deg,rgba(255,255,255,.90),rgba(232,249,247,.80))!important;backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px);border:1px solid rgba(255,255,255,.85);box-shadow:var(--tc-glass-shadow)}
+dialog:not(.call-dialog)::backdrop{background:rgba(13,45,49,.32);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+@media(max-width:740px){
+  body{background:linear-gradient(145deg,#c5efde,#e0e5fa 55%,#fce0e9)!important}
+  #app{background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important}
+  .sidebar{background:linear-gradient(155deg,rgba(255,255,255,.65),rgba(232,246,246,.36))!important}
+  .conversation{background:linear-gradient(145deg,rgba(255,255,255,.28),rgba(231,248,246,.14))!important}
+  .chathead,.compose{background:rgba(255,255,255,.66)!important}
+  .messages{background:radial-gradient(circle at 15% 13%,rgba(157,214,236,.30),transparent 48%),radial-gradient(circle at 85% 76%,rgba(186,231,208,.26),transparent 50%)!important}
+}
+@media(prefers-reduced-transparency:reduce){
+ #app,.sidebar,.chathead,.compose,.profile{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(255,255,255,.94)!important}
+}
+
+/* ===== V6.8: Tema glass adaptif ===== */
+html[data-theme="light"]{color-scheme:light}
+html[data-theme="dark"]{color-scheme:dark}
+html[data-theme="system"]{color-scheme:light dark}
+html[data-theme="dark"],html[data-theme="dark"] body{
+ --tc-glass-border:rgba(173,211,233,.24);--tc-glass-shadow:0 20px 55px rgba(0,0,0,.37);
+ background:radial-gradient(circle at 8% 12%,rgba(39,158,144,.30),transparent 40%),radial-gradient(circle at 90% 16%,rgba(92,89,175,.29),transparent 39%),radial-gradient(circle at 65% 100%,rgba(66,108,139,.19),transparent 45%),#101c29!important;
+ color:#ecf5fa!important;
+}
+html[data-theme="dark"] #app{background:rgba(26,39,54,.58)!important;border-color:rgba(187,220,232,.23)!important;box-shadow:0 20px 90px #020c18aa,inset 0 1px rgba(255,255,255,.15)!important}
+html[data-theme="dark"] .sidebar{background:linear-gradient(145deg,rgba(31,55,68,.84),rgba(31,47,69,.62))!important;border-color:rgba(193,220,233,.18)!important}
+html[data-theme="dark"] .conversation{background:rgba(17,32,47,.40)!important}
+html[data-theme="dark"] .messages{background:radial-gradient(circle at 11% 10%,rgba(40,143,128,.13),transparent 50%),radial-gradient(circle at 90% 75%,rgba(68,77,147,.15),transparent 48%)!important}
+html[data-theme="dark"] .chathead,html[data-theme="dark"] .compose,html[data-theme="dark"] .profile{background:rgba(29,49,64,.80)!important;border-color:rgba(193,220,233,.15)!important}
+html[data-theme="dark"] .search,html[data-theme="dark"] .compose input,html[data-theme="dark"] .mode,html[data-theme="dark"] .round{background:rgba(42,63,80,.67)!important;border-color:rgba(187,220,232,.20)!important;color:#eef6ff!important}
+html[data-theme="dark"] .contact:hover,html[data-theme="dark"] .contact.active{background:rgba(98,143,158,.25)!important;border-color:rgba(187,220,232,.20)!important}
+html[data-theme="dark"] .bubble.them{background:rgba(50,71,83,.88)!important;border-color:rgba(198,229,242,.15)!important;color:#f3f9ff!important}
+html[data-theme="dark"] .bubble.me{background:linear-gradient(135deg,rgba(12,114,108,.92),rgba(27,91,112,.90))!important;border-color:rgba(198,229,242,.15)!important;color:#fff!important}
+html[data-theme="dark"] .sidebar,html[data-theme="dark"] .sidebar *,html[data-theme="dark"] .conversation,html[data-theme="dark"] .chathead,html[data-theme="dark"] .chat-person,html[data-theme="dark"] .profile,html[data-theme="dark"] .contact{color:#eaf5f8}
+html[data-theme="dark"] .tc-empty,html[data-theme="dark"] .tc-hint,html[data-theme="dark"] .contact p,html[data-theme="dark"] .chathead small,html[data-theme="dark"] .profile small{color:#a9c3ca!important}
+html[data-theme="dark"] input::placeholder{color:#a9bcc7!important}
+html[data-theme="dark"] dialog:not(.call-dialog){background:rgba(32,50,65,.97)!important;border-color:rgba(197,223,235,.26)!important;color:#edf7ff!important}
+html[data-theme="dark"] .tc-settings select,html[data-theme="dark"] .tc-settings input{background:#273c4f!important;color:#fff!important;border-color:#587183!important}
+.tc-settings input{box-sizing:border-box;padding:12px;width:100%;border:1px solid #c5d9d0;border-radius:10px;background:rgba(255,255,255,.75);color:#183b34}
+@media (prefers-color-scheme:dark){
+ html[data-theme="system"]{color-scheme:dark}
+ html[data-theme="system"] body{background:radial-gradient(circle at 10% 10%,#214e50,transparent 46%),radial-gradient(circle at 90% 80%,#303553,transparent 50%),#101c29!important;color:#edf7ff}
+ html[data-theme="system"] #app{background:rgba(25,43,56,.69)!important;border-color:#b0d5dd44!important}
+ html[data-theme="system"] .sidebar{background:rgba(32,54,67,.84)!important;color:#edf7ff}
+ html[data-theme="system"] .conversation{background:rgba(24,42,59,.55)!important;color:#edf7ff}
+ html[data-theme="system"] .chathead,html[data-theme="system"] .compose,html[data-theme="system"] .profile{background:rgba(34,55,69,.85)!important;color:#edf7ff}
+ html[data-theme="system"] .search,html[data-theme="system"] .compose input,html[data-theme="system"] .mode{background:#365264bb!important;color:#fff!important}
+ html[data-theme="system"] .bubble.them{background:#385365!important;color:#fff!important}
+ html[data-theme="system"] .bubble.me{background:#116e70!important;color:#fff!important}
+ html[data-theme="system"] dialog:not(.call-dialog){background:#284352!important;color:#fff!important}
+ html[data-theme="system"] .tc-settings select,html[data-theme="system"] .tc-settings input{background:#284352;color:#fff}
+}

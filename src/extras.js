@@ -226,7 +226,7 @@ export async function handleExtra(request, env, me, deps){
   if(!await deps.limit(request,env,'call-start',8))return bad('Terlalu banyak panggilan. Coba beberapa saat lagi.',429);
   const callee=chat.user_a===me.id?chat.user_b:chat.user_a,id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO tc_call_sessions(id,chat_id,caller_id,callee_id,kind) VALUES(?,?,?,?,?)').bind(id,chat.id,me.id,callee,kind).run();
-  deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',tag:'tc-call-'+id},120);
+  deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id},120);
   return res({ok:true,callId:id});
  }
  if(p==='/api/calls/incoming'&&request.method==='GET'){
@@ -234,11 +234,30 @@ export async function handleExtra(request, env, me, deps){
     FROM tc_call_sessions c JOIN users u ON u.id=c.caller_id
     WHERE c.callee_id=? AND c.status='ringing' AND c.created_at>datetime('now','-90 seconds')
     ORDER BY c.created_at DESC LIMIT 1`).bind(me.id).first();
+  if(r){
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_call_delivery (call_id TEXT PRIMARY KEY,callee_id TEXT NOT NULL,received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`).run();
+    await env.DB.prepare('INSERT OR IGNORE INTO tc_call_delivery(call_id,callee_id) VALUES(?,?)').bind(r.id,me.id).run();
+  }
   return res({ok:true,call:r||null});
+ }
+ if(p==='/api/calls/ringing-ack'&&request.method==='POST'){
+  const d=await deps.readJSON(request),call=await callInfo(env,trimmed(d.callId),me.id);
+  if(!call||call.callee_id!==me.id)return bad('Panggilan tidak ditemukan.',404);
+  if(call.status!=='ringing')return res({ok:true,received:false});
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_call_delivery (
+    call_id TEXT PRIMARY KEY, callee_id TEXT NOT NULL, received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+  await env.DB.prepare('INSERT OR IGNORE INTO tc_call_delivery(call_id,callee_id) VALUES(?,?)').bind(call.id,me.id).run();
+  return res({ok:true,received:true});
  }
  if(p==='/api/calls/state'&&request.method==='GET'){
   const call=await callInfo(env,trimmed(u.searchParams.get('callId')),me.id);
-  return call?res({ok:true,call:{id:call.id,status:call.status,kind:call.kind,chatId:call.chat_id,callerId:call.caller_id}}):bad('Panggilan tidak ditemukan.',404);
+  if(!call)return bad('Panggilan tidak ditemukan.',404);
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_call_delivery (
+    call_id TEXT PRIMARY KEY,callee_id TEXT NOT NULL,received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+  const receipt=await env.DB.prepare('SELECT received_at FROM tc_call_delivery WHERE call_id=?').bind(call.id).first();
+  return res({ok:true,call:{id:call.id,status:call.status,kind:call.kind,chatId:call.chat_id,callerId:call.caller_id,delivered:!!receipt}});
  }
  if(p==='/api/calls/decision'&&request.method==='POST'){
   const d=await deps.readJSON(request),call=await callInfo(env,trimmed(d.callId),me.id),decision=trimmed(d.action);
