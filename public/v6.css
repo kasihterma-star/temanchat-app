@@ -257,3 +257,38 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 }
 
 [hidden]{display:none!important}
+
+/* V7.0: Avatar foto, monokrom glass tetap sama. */
+.avatar,.call-avatar{position:relative;overflow:hidden;isolation:isolate}
+.tc-avatar-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;
+ border-radius:inherit;display:block;z-index:1;background:var(--control)}
+.tc-avatar-settings{display:flex;gap:16px;align-items:center;padding:11px 0 13px}
+.tc-avatar-settings-preview{flex:none;width:76px;height:76px;border-radius:25px;font-size:29px}
+.tc-avatar-settings-buttons{display:flex;flex-wrap:wrap;align-items:center;gap:7px;min-width:0}
+.tc-avatar-settings-buttons button{font-size:12px;padding:9px 12px;min-height:38px;border-radius:11px}
+.tc-avatar-settings-buttons button:disabled{opacity:.45;cursor:not-allowed}
+.tc-avatar-remove{border:1px solid var(--line);background:var(--control);color:var(--text);cursor:pointer}
+.tc-call-status-pill{position:absolute;left:50%;top:18px;transform:translateX(-50%);
+ z-index:5;max-width:calc(100% - 158px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ padding:9px 16px;border:1px solid rgba(255,255,255,.22);border-radius:999px;
+ background:rgba(22,26,26,.62);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+ font-variant-numeric:tabular-nums;font-size:13px;letter-spacing:.03em;color:#fff;font-weight:750;
+ pointer-events:none;box-shadow:0 4px 18px rgba(0,0,0,.2)}
+@media(max-width:740px){.tc-call-status-pill{top:calc(15px + env(safe-area-inset-top));font-size:12px;max-width:calc(100% - 130px)}}
+
+/* V7.0 akun & keamanan: email pribadi dan permintaan pindah email. */
+.tc-security-heading{margin-top:9px;border-top:1px solid var(--line-soft);padding-top:15px}
+.tc-email-display{display:flex;flex-direction:column;gap:5px;padding:12px 14px;border-radius:13px;
+ border:1px solid var(--line-soft);background:var(--control);overflow-wrap:anywhere}
+.tc-email-display small{color:var(--muted)}
+.tc-email-display strong{font-size:14px;color:var(--strong);font-weight:700}
+.tc-email-change-toggle{padding:11px 13px;border:1px solid var(--line-soft);border-radius:12px;
+ color:var(--strong);background:var(--control);cursor:pointer;text-align:left;font-weight:700}
+.tc-email-change-box{display:flex;flex-direction:column;gap:9px;padding:12px;border:1px solid var(--line-soft);
+ border-radius:14px;background:var(--glass);min-width:0}
+.tc-email-change-box[hidden]{display:none}
+.tc-email-status{overflow-wrap:anywhere}
+
+/* Panggilan awal: ikon masih dapat ditekan untuk menampilkan alasan kenapa terkunci. */
+.head-actions .tc-call-locked { opacity: .62; }
+.head-actions .tc-call-locked:hover, .head-actions .tc-call-locked:focus-visible { opacity: 1; }

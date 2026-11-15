@@ -1,0 +1,12 @@
+TemanChat V7.0 - PANDUAN SINGKAT
+
+1. Cadangkan folder temanchat-app lama.
+2. Ekstrak ZIP; salin seluruh isi ZIP (bukan folder luarnya) ke Documents\GitHub\temanchat-app lalu Replace. Jangan hapus .git.
+3. GitHub Desktop -> Commit "TemanChat V7.0 Profil Email Panggilan Aman" -> Push origin.
+4. Cloudflare -> temanchat-app -> Deployments -> pastikan Ready.
+5. Coba foto profil via Pengaturan; lihat email dan coba perubahan email via verifikasi.
+6. Uji timer panggilan 00:00 setelah benar-benar tersambung.
+7. Uji pembatas panggilan: akun baru yang hanya menerima satu pesan BELUM dapat dipanggil. Setelah dibalas, tombol telepon/video bisa digunakan. Pengaturan ini berlaku juga untuk percakapan lama dengan kedua arah pesan.
+
+Jangan berbagi password atau API key. Ganti email hanya dari menu aplikasi, bukan dari database.
+Fitur pengiriman gambar/video di chat masih membutuhkan bucket Cloudflare R2; foto profil tidak memerlukan R2.

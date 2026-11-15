@@ -61,6 +61,32 @@ async function userSession(req,env){
   return env.DB.prepare('SELECT u.id,u.username,u.email,u.display_name,u.email_verified FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>datetime(\'now\') AND u.email_verified=1 LIMIT 1').bind(await sha(token)).first();
 }
 const publicUser=u=>({id:u.id,username:u.username,email:u.email,display_name:u.display_name,email_verified:u.email_verified});
+// Foto profil mini (JPEG, maksimal 60 KB per akun). Terpisah dari R2 media chat.
+// Hanya pengguna terautentikasi yang dapat melihat foto; akun hanya mengubah fotonya sendiri.
+let avatarSchemaPromise;
+function ensureAvatarSchema(env){
+ if(!avatarSchemaPromise)avatarSchemaPromise=env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_profile_avatars (
+   user_id TEXT PRIMARY KEY,
+   image_b64 TEXT NOT NULL,
+   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+ )`).run().catch(e=>{avatarSchemaPromise=null;throw e});
+ return avatarSchemaPromise;
+}
+
+let emailChangeSchemaPromise;
+function ensureEmailChangeSchema(env){
+ if(!emailChangeSchemaPromise)emailChangeSchemaPromise=env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_pending_email_changes (
+  user_id TEXT PRIMARY KEY,
+  new_email TEXT NOT NULL COLLATE NOCASE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+ )`).run().catch(e=>{emailChangeSchemaPromise=null;throw e});
+ return emailChangeSchemaPromise;
+}
+
 // Watermark pesan per pengguna: delivered saat perangkat terhubung dan mengambil daftar,
 // read hanya setelah percakapan terbuka dan terlihat. Tidak mengklaim diterima saat app offline.
 let receiptSchema;
@@ -120,11 +146,27 @@ export default {
       }
       return reply({ok:Object.values(checks).every(c=>c.ready),checks});
     }
-    if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'6.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:false});
+    if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.0.1',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:false});
     if(path==='/api/auth/config'&&request.method==='GET')return reply({siteKey:SITE_KEY,authReady:Boolean(env.DB&&env.RESEND_API_KEY&&env.TURNSTILE_SECRET_KEY)});
     if(path==='/api/auth/me'&&request.method==='GET'){
       const u=await userSession(request,env);return u?reply({ok:true,user:publicUser(u)}):reply({ok:false},401);
     }
+    if(path.startsWith('/api/avatar/')&&request.method==='GET'){
+      const me=await userSession(request,env);
+      if(!me)return reply({error:'Silakan login.'},401);
+      const username=decodeURIComponent(path.slice('/api/avatar/'.length)).toLowerCase();
+      if(!/^[a-z0-9_]{3,24}$/.test(username))return new Response(null,{status:404});
+      await ensureAvatarSchema(env);
+      const row=await env.DB.prepare(`SELECT a.image_b64 FROM tc_profile_avatars a
+        JOIN users u ON u.id=a.user_id WHERE u.username=? AND u.email_verified=1 LIMIT 1`)
+        .bind(username).first();
+      if(!row)return new Response(null,{status:404,headers:{'Cache-Control':'private,max-age=30'}});
+      const binary=atob(row.image_b64);
+      const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));
+      return new Response(bytes,{headers:{'Content-Type':'image/jpeg','Cache-Control':'private,max-age=45',
+        'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'"}});
+    }
+
     if(path==='/api/auth/verify'&&request.method==='GET'){
       const row=await consumeToken(env,url.searchParams.get('token'),'verify_email');
       if(!row)return new Response('Tautan verifikasi tidak berlaku atau sudah digunakan.',{status:400,headers:{'Cache-Control':'no-store'}});
@@ -133,7 +175,7 @@ export default {
     }
     if(path.startsWith('/api/auth/')&&request.method==='POST'){
       if(!allowOrigin(request))return reply({error:'Origin tidak diizinkan'},403);
-      let d;try{d=await readJSON(request)}catch{return reply({error:'Permintaan JSON tidak valid'},400)}
+      let d;try{d=await readJSON(request,path==='/api/auth/avatar'?90000:12000)}catch{return reply({error:'Permintaan JSON tidak valid atau terlalu besar'},400)}
       if(path==='/api/auth/register'){
         if(!await limit(request,env,'register',5))return reply({error:'Terlalu banyak percobaan. Coba lagi nanti.'},429);
         const email=clean(d.email).toLowerCase(),username=clean(d.username).toLowerCase(),name=clean(d.displayName),password=d.password;
@@ -200,6 +242,89 @@ export default {
         ]);
         return reply({ok:true,message:'Password berhasil diganti. Silakan login kembali.'});
       }
+      if(path==='/api/auth/email-change/request'){
+        const me=await userSession(request,env);
+        if(!me)return reply({error:'Silakan login kembali.'},401);
+        if(!await limit(request,env,'change-email',3,me.id))return reply({error:'Terlalu banyak permintaan. Coba kembali dalam beberapa menit.'},429);
+        const next=clean(d.newEmail).toLowerCase();
+        const pwd=d.password;
+        if(!EMAIL.test(next)||next.length>254)return reply({error:'Alamat email baru tidak valid.'},400);
+        if(next===me.email.toLowerCase())return reply({error:'Alamat tersebut sudah digunakan sebagai email akun.'},400);
+        if(typeof pwd!=='string'||pwd.length>128||!pwd.length)return reply({error:'Masukkan password akun.'},400);
+        const existing=await env.DB.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE LIMIT 1').bind(next).first();
+        if(existing)return reply({error:'Alamat email baru sudah terdaftar.'},409);
+        const credentials=await env.DB.prepare('SELECT password_hash FROM users WHERE id=? LIMIT 1').bind(me.id).first();
+        if(!credentials||!await verifyPassword(pwd,credentials.password_hash))return reply({error:'Password akun salah.'},403);
+        await ensureEmailChangeSchema(env);
+        const token=random(32),hash=await sha(token);
+        await env.DB.prepare(`INSERT INTO tc_pending_email_changes(user_id,new_email,token_hash,expires_at)
+          VALUES(?,?,?,datetime('now','+30 minutes')) ON CONFLICT(user_id) DO UPDATE SET
+          new_email=excluded.new_email,token_hash=excluded.token_hash,
+          expires_at=excluded.expires_at,created_at=CURRENT_TIMESTAMP`)
+          .bind(me.id,next,hash).run();
+        const confirmedLink=`https://${HOST}/confirm-email.html?token=${token}`;
+        const sent=await mail(env,next,'Konfirmasi perubahan email TemanChat',
+          `Halo ${me.display_name}!\n\nAda permintaan mengganti alamat email TemanChat menjadi ${next}.\n\n`
+          +`Buka tautan berikut dan tekan tombol Konfirmasi untuk melanjutkan:\n${confirmedLink}\n\n`
+          +'Tautan berlaku selama 30 menit. Jangan bagikan tautan ini. Abaikan jika bukan Anda yang meminta.');
+        if(!sent){await env.DB.prepare('DELETE FROM tc_pending_email_changes WHERE user_id=? AND token_hash=?')
+          .bind(me.id,hash).run();return reply({error:'Email konfirmasi belum bisa dikirim. Coba lagi.'},503)}
+        // Peringatan ke email lama; perubahan belum berlaku sampai verifikasi alamat baru.
+        ctx?.waitUntil(mail(env,me.email,'Permintaan perubahan email TemanChat',
+          `Ada permintaan perubahan email akun @${me.username} ke alamat lain. Jika bukan Anda, segera ganti password akun TemanChat.`));
+        return reply({ok:true,message:'Tautan konfirmasi dikirim ke alamat email baru. Email lama tetap aktif sampai konfirmasi.'});
+      }
+      if(path==='/api/auth/email-change/confirm'){
+        if(!await limit(request,env,'email-confirm',12))return reply({error:'Terlalu banyak percobaan. Coba lagi nanti.'},429);
+        if(typeof d.token!=='string'||!/^[0-9a-f]{64}$/.test(d.token))return reply({error:'Tautan tidak valid.'},400);
+        await ensureEmailChangeSchema(env);
+        const hash=await sha(d.token);
+        // Token dikonsumsi dengan DELETE RETURNING, sehingga link tidak dapat digunakan dua kali.
+        const pending=await env.DB.prepare(`DELETE FROM tc_pending_email_changes
+          WHERE token_hash=? AND expires_at>datetime('now') RETURNING user_id,new_email`)
+          .bind(hash).first();
+        if(!pending)return reply({error:'Tautan sudah digunakan atau kedaluwarsa.'},400);
+        const before=await env.DB.prepare('SELECT email,username FROM users WHERE id=? LIMIT 1').bind(pending.user_id).first();
+        if(!before)return reply({error:'Akun tidak ditemukan.'},404);
+        try{
+          await env.DB.batch([
+            env.DB.prepare('UPDATE users SET email=?,email_verified=1,updated_at=CURRENT_TIMESTAMP WHERE id=?')
+              .bind(pending.new_email,pending.user_id),
+            env.DB.prepare('UPDATE sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND revoked_at IS NULL')
+              .bind(pending.user_id)
+          ]);
+        }catch{return reply({error:'Alamat email tidak dapat digunakan. Minta tautan baru dari Pengaturan.'},409)}
+        // Langganan push lama ditiadakan agar perangkat yang sudah logout tidak menerima informasi.
+        const pushTable=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tc_push_subscriptions'").first();
+        if(pushTable)await env.DB.prepare('DELETE FROM tc_push_subscriptions WHERE user_id=?').bind(pending.user_id).run();
+        ctx?.waitUntil(mail(env,before.email,'Email TemanChat telah diubah',
+          `Email login untuk akun @${before.username} telah diganti. Jika Anda tidak melakukan ini, segera hubungi pengelola TemanChat.`));
+        return reply({ok:true,message:'Email berhasil diubah. Semua sesi lama telah keluar. Silakan login menggunakan email baru.'});
+      }
+      if(path==='/api/auth/avatar'){
+        const me=await userSession(request,env);
+        if(!me)return reply({error:'Sesi tidak tersedia.'},401);
+        if(!await limit(request,env,'avatar-upload',30,me.id))return reply({error:'Terlalu sering mengganti foto. Coba sebentar lagi.'},429);
+        await ensureAvatarSchema(env);
+        // null = hapus foto. Semua foto yang masuk sudah dikecilkan dan dikonversi ke JPEG oleh canvas.
+        if(d.dataUrl===null){
+          await env.DB.prepare('DELETE FROM tc_profile_avatars WHERE user_id=?').bind(me.id).run();
+          return reply({ok:true,removed:true});
+        }
+        if(typeof d.dataUrl!=='string'||d.dataUrl.length>85000||
+           !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(d.dataUrl))
+          return reply({error:'Format foto tidak valid. Gunakan foto JPG kecil.'},400);
+        let bytes;try{bytes=atob(d.dataUrl.slice('data:image/jpeg;base64,'.length));}
+        catch{return reply({error:'Data foto rusak.'},400)}
+        if(bytes.length<200||bytes.length>60000||bytes.charCodeAt(0)!==255||bytes.charCodeAt(1)!==216||
+           bytes.charCodeAt(2)!==255||bytes.charCodeAt(bytes.length-2)!==255||bytes.charCodeAt(bytes.length-1)!==217)
+          return reply({error:'Foto terlalu besar atau bukan JPEG yang valid.'},400);
+        await env.DB.prepare(`INSERT INTO tc_profile_avatars(user_id,image_b64,updated_at)
+          VALUES(?,?,CURRENT_TIMESTAMP)
+          ON CONFLICT(user_id) DO UPDATE SET image_b64=excluded.image_b64,updated_at=CURRENT_TIMESTAMP`)
+          .bind(me.id,d.dataUrl.slice('data:image/jpeg;base64,'.length)).run();
+        return reply({ok:true});
+      }
       if(path==='/api/auth/profile'){
         const me=await userSession(request,env);
         if(!me)return reply({error:'Sesi tidak tersedia.'},401);
@@ -252,11 +377,15 @@ export default {
           (SELECT COUNT(*) FROM tc_direct_messages incoming
             WHERE incoming.chat_id=c.id AND incoming.sender_id<>?
               AND incoming.id>COALESCE((SELECT receipt.read_id FROM tc_chat_receipts receipt
-                WHERE receipt.chat_id=c.id AND receipt.user_id=?),0)) AS unread_count
+                WHERE receipt.chat_id=c.id AND receipt.user_id=?),0)) AS unread_count,
+          (EXISTS(SELECT 1 FROM tc_direct_messages own_msg
+             WHERE own_msg.chat_id=c.id AND own_msg.sender_id=?)
+           AND EXISTS(SELECT 1 FROM tc_direct_messages other_msg
+             WHERE other_msg.chat_id=c.id AND other_msg.sender_id=u.id)) AS call_unlocked
           FROM tc_direct_chats c
           JOIN users u ON u.id=CASE WHEN c.user_a=? THEN c.user_b ELSE c.user_a END
           WHERE c.user_a=? OR c.user_b=?
-          ORDER BY COALESCE(last_time,c.created_at) DESC LIMIT 100`).bind(me.id,me.id,me.id,me.id,me.id).all();
+          ORDER BY COALESCE(last_time,c.created_at) DESC LIMIT 100`).bind(me.id,me.id,me.id,me.id,me.id,me.id).all();
         return reply({ok:true,conversations:result.results});
       }
       if(path==='/api/chat/messages'&&request.method==='GET'){

@@ -223,8 +223,18 @@ export async function handleExtra(request, env, me, deps){
  if(p==='/api/calls/start'&&request.method==='POST'){
   const d=await deps.readJSON(request),chat=await member(env,trimmed(d.conversationId),me.id),kind=trimmed(d.kind);
   if(!chat||!['audio','video'].includes(kind))return bad('Percakapan atau jenis panggilan tidak valid.');
+  const callee=chat.user_a===me.id?chat.user_b:chat.user_a;
+  // Perlindungan panggilan pertama: harus pernah saling mengirim pesan (dua arah).
+  // Cek ulang di server pada SETIAP panggilan; tombol UI saja tidak cukup untuk keamanan.
+  // Berlaku juga untuk video call, dan percakapan lama yang sudah pernah saling membalas otomatis lolos.
+  const exchange=await env.DB.prepare(`SELECT
+    EXISTS(SELECT 1 FROM tc_direct_messages WHERE chat_id=? AND sender_id=?) AS caller_sent,
+    EXISTS(SELECT 1 FROM tc_direct_messages WHERE chat_id=? AND sender_id=?) AS callee_replied`)
+    .bind(chat.id,me.id,chat.id,callee).first();
+  if(!Number(exchange?.caller_sent)||!Number(exchange?.callee_replied))
+    return bad('Saling bertukar pesan terlebih dahulu untuk memulai panggilan suara atau video.',403);
   if(!await deps.limit(request,env,'call-start',8))return bad('Terlalu banyak panggilan. Coba beberapa saat lagi.',429);
-  const callee=chat.user_a===me.id?chat.user_b:chat.user_a,id=crypto.randomUUID();
+  const id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO tc_call_sessions(id,chat_id,caller_id,callee_id,kind) VALUES(?,?,?,?,?)').bind(id,chat.id,me.id,callee,kind).run();
   deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id},120);
   return res({ok:true,callId:id});

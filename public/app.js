@@ -88,15 +88,62 @@ async function api(url,options={}){
 }
 const post=(url,body)=>api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const avatar=name=>(name||'?').trim().charAt(0).toUpperCase();
+let ownAvatarVersion=0;
+function paintAvatar(node,name,username){
+ if(!node)return;
+ node.replaceChildren(document.createTextNode(avatar(name)));
+ if(typeof username!=='string'||!/^[a-z0-9_]{3,24}$/i.test(username))return;
+ const img=document.createElement('img');img.className='tc-avatar-photo';img.alt='';img.decoding='async';
+ img.onerror=()=>img.remove();
+ img.src='/api/avatar/'+encodeURIComponent(username)+(me&&username===me.username?'?v='+ownAvatarVersion:'');
+ node.append(img);
+}
+function makeAvatar(name,username,extraClass='avatar teal'){
+ const node=element('div',extraClass);paintAvatar(node,name,username);return node;
+}
+async function prepareAvatarPhoto(file){
+ if(!file||!/^image\/(jpeg|png|webp|gif)$/i.test(file.type))throw Error('Pilih foto JPG, PNG, WEBP, atau GIF.');
+ if(file.size>6*1024*1024)throw Error('Foto asal maksimal 6 MB.');
+ const url=URL.createObjectURL(file);
+ try{
+  const img=await new Promise((resolve,reject)=>{
+   const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(Error('Gambar tidak dapat dibaca.'));
+   i.src=url;
+  });
+  if(!img.naturalWidth||!img.naturalHeight)throw Error('Dimensi foto tidak valid.');
+  const side=Math.min(img.naturalWidth,img.naturalHeight);
+  const draw=(pixels,quality)=>{
+   const canvas=document.createElement('canvas');canvas.width=pixels;canvas.height=pixels;
+   const ctx=canvas.getContext('2d');if(!ctx)throw Error('Canvas tidak tersedia.');
+   ctx.drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,pixels,pixels);
+   return canvas.toDataURL('image/jpeg',quality);
+  };
+  let dataUrl=draw(160,.76);
+  if(dataUrl.length>76000)dataUrl=draw(128,.66);
+  if(dataUrl.length>76000)throw Error('Foto masih terlalu besar, coba foto lain.');
+  return dataUrl;
+ }finally{URL.revokeObjectURL(url)}
+}
+
 function smallTime(val){if(!val)return'';const d=new Date(val.replace(' ','T')+(val.endsWith('Z')?'':'Z'));return Number.isNaN(d.getTime())?'':d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});}
 function showChat(){if(innerWidth<=740){$('sidebar').classList.remove('mobile-visible');$('conversation').classList.remove('mobile-hidden');}}
 function showList(){if(innerWidth<=740){$('sidebar').classList.add('mobile-visible');$('conversation').classList.add('mobile-hidden');}}
 function placeholder(msg){$('messages').replaceChildren(element('div','day',msg));}
 function updateHeader(c){
- $('headName').textContent=c?c.other_name:'Pilih teman';$('headAvatar').textContent=c?avatar(c.other_name):'?';
+ $('headName').textContent=c?c.other_name:'Pilih teman';paintAvatar($('headAvatar'),c?.other_name,c?.other_username);
  $('headStatus').textContent=c?'@'+c.other_username:'Cari pengguna untuk mulai chat';
  $('messageInput').disabled=!c;document.querySelector('.send').disabled=!c;
- for(const id of ['attachBtn','voiceBtn','videoBtn'])$(id).disabled=!c;
+ $('attachBtn').disabled=!c;
+ const callUnlocked=!!c&&Boolean(Number(c.call_unlocked||0));
+ for(const id of ['voiceBtn','videoBtn']){
+  const button=$(id);
+  button.disabled=!c;
+  button.classList.toggle('tc-call-locked',!!c&&!callUnlocked);
+  button.title=!c?'Pilih teman terlebih dahulu':callUnlocked
+    ?(id==='voiceBtn'?'Telepon suara':'Panggilan video')
+    :'Saling bertukar pesan dahulu agar bisa menelepon';
+  button.setAttribute('aria-label',button.title);
+ }
 }
 function renderChats(){
  const box=$('contacts'),q=$('search').value.trim().toLowerCase();box.replaceChildren();
@@ -106,7 +153,7 @@ function renderChats(){
  if(!list.length){box.append(element('p','tc-empty',q.length>=2?'Tidak ditemukan. Coba username lain.':'Belum ada percakapan. Cari username teman di atas.'));return}
  for(const c of list){
   const b=element('button','contact'+(!c.searchPerson&&c.id===active?.id?' active':''));b.type='button';
-  const av=element('div','avatar teal',avatar(c.other_name)),body=element('div','contact-content'),top=element('div','contact-top');
+  const av=makeAvatar(c.other_name,c.other_username),body=element('div','contact-content'),top=element('div','contact-top');
   top.append(element('b','',c.other_name),element('small','',c.searchPerson?'Mulai chat':smallTime(c.last_time)));
   body.append(top,element('p','',c.searchPerson?'@'+c.other_username:(c.last_message||'@'+c.other_username)));
   const unread=Math.max(0,Number(c.unread_count||0));
@@ -155,7 +202,7 @@ async function fetchChats(){
   void syncAppBadge(totalUnread);
   notificationBaselineReady=true;
 
-  if(active){const now=chats.find(c=>c.id===active.id);if(now)active=now;}
+  if(active){const now=chats.find(c=>c.id===active.id);if(now){active=now;updateHeader(active);}}
   if(!$('search').value.trim()||searchResults===null)renderChats();
  }catch(e){toast(e.message)}finally{busyChats=false}
 }
@@ -329,12 +376,80 @@ $('settingsBtn').onclick=()=>{
    saveName.disabled=true;
    try{const d=await post('/api/auth/profile',{displayName:name});me=d.user;
      document.querySelector('.profile b').textContent=me.display_name;
-     document.querySelector('.profile .avatar').textContent=avatar(me.display_name);
+     paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
      $('modalDesc').textContent=`${me.display_name} (@${me.username})`;
      toast('Nama panggilan berhasil diperbarui.');
    }catch(e){toast(e.message)}finally{saveName.disabled=false}
  };
  wrap.append(profileTitle,profileInput,saveName,element('small','','Nama panggilan terlihat oleh teman. @username dan email login tidak berubah.'));
+ // Foto avatar terpisah dari media chat: bisa digunakan walaupun R2 belum aktif.
+ const photoTitle=element('label','','Foto profil saya');
+ const photoRow=element('div','tc-avatar-settings');
+ const photoPreview=makeAvatar(me?.display_name,me?.username,'avatar tc-avatar-settings-preview');
+ const photoButtons=element('div','tc-avatar-settings-buttons');
+ const filePicker=element('input');filePicker.type='file';filePicker.accept='image/jpeg,image/png,image/webp,image/gif';
+ filePicker.setAttribute('aria-label','Pilih foto profil');filePicker.style.display='none';
+ let pendingPhoto=null;
+ const choosePhoto=element('button','primary','Pilih foto');choosePhoto.type='button';choosePhoto.onclick=()=>filePicker.click();
+ const savePhoto=element('button','primary','Simpan foto profil');savePhoto.type='button';savePhoto.disabled=true;
+ filePicker.onchange=async()=>{
+  const file=filePicker.files?.[0];filePicker.value='';if(!file)return;
+  try{pendingPhoto=await prepareAvatarPhoto(file);
+   photoPreview.replaceChildren(document.createTextNode(avatar(me?.display_name)));
+   const img=document.createElement('img');img.src=pendingPhoto;img.alt='Foto terpilih';img.className='tc-avatar-photo';photoPreview.append(img);
+   savePhoto.disabled=false;
+  }catch(e){toast(e.message)}
+ };
+ savePhoto.onclick=async()=>{
+  if(!pendingPhoto)return;savePhoto.disabled=true;
+  try{await post('/api/auth/avatar',{dataUrl:pendingPhoto});pendingPhoto=null;ownAvatarVersion=Date.now();
+    paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
+    paintAvatar(photoPreview,me.display_name,me.username);
+    toast('Foto profil tersimpan dan dapat dilihat teman.');
+  }catch(e){toast(e.message);savePhoto.disabled=false;}
+ };
+ const removePhoto=element('button','tc-avatar-remove','Hapus foto');removePhoto.type='button';
+ removePhoto.onclick=async()=>{
+  removePhoto.disabled=true;
+  try{await post('/api/auth/avatar',{dataUrl:null});pendingPhoto=null;savePhoto.disabled=true;
+    ownAvatarVersion=Date.now();paintAvatar(photoPreview,me.display_name,me.username);
+    paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
+    toast('Foto profil dihapus.');
+  }catch(e){toast(e.message)}finally{removePhoto.disabled=false}
+ };
+ photoButtons.append(choosePhoto,savePhoto,removePhoto,filePicker);photoRow.append(photoPreview,photoButtons);
+ wrap.append(photoTitle,photoRow,element('small','','Foto dipotong persegi dan diperkecil otomatis, maksimum 60 KB. Tersimpan di D1 tanpa perlu R2.'));
+
+ // Akun & keamanan: email hanya tampil untuk pemilik akun, bukan pada profil publik.
+ const sectionTitle=element('label','','Akun & keamanan');sectionTitle.classList.add('tc-security-heading');
+ const currentEmail=element('div','tc-email-display');
+ currentEmail.append(element('small','','Email login yang terdaftar'),element('strong','',me?.email||'Tidak tersedia'));
+ const changeEmailToggle=element('button','tc-email-change-toggle','Ganti alamat email');changeEmailToggle.type='button';
+ const changeBox=element('div','tc-email-change-box');changeBox.hidden=true;
+ const newEmail=element('input');newEmail.type='email';newEmail.maxLength=254;
+ newEmail.autocomplete='email';newEmail.placeholder='Alamat email baru';newEmail.setAttribute('aria-label','Email baru');
+ const emailPass=element('input');emailPass.type='password';emailPass.maxLength=128;
+ emailPass.autocomplete='current-password';emailPass.placeholder='Password akun saat ini';emailPass.setAttribute('aria-label','Konfirmasi password akun');
+ const confirmEmailRequest=element('button','primary','Kirim tautan verifikasi email');confirmEmailRequest.type='button';
+ const emailStatus=element('small','tc-email-status','');
+ changeEmailToggle.onclick=()=>{changeBox.hidden=!changeBox.hidden;changeEmailToggle.setAttribute('aria-expanded',String(!changeBox.hidden));};
+ changeEmailToggle.setAttribute('aria-expanded','false');
+ confirmEmailRequest.onclick=async()=>{
+  const email=newEmail.value.trim(),password=emailPass.value;
+  if(!email||!newEmail.checkValidity()){toast('Periksa alamat email baru.');return}
+  if(!password){toast('Masukkan password akun terlebih dahulu.');return}
+  confirmEmailRequest.disabled=true;emailStatus.textContent='Mengirim tautan verifikasi…';
+  try{
+   const result=await post('/api/auth/email-change/request',{newEmail:email,password});
+   emailPass.value='';emailStatus.textContent=result.message||'Periksa kotak masuk email baru.';toast('Periksa email baru untuk menyelesaikan perubahan.');
+  }catch(e){emailStatus.textContent=e.message;toast(e.message)}
+  finally{emailPass.value='';confirmEmailRequest.disabled=false}
+ };
+ changeBox.append(newEmail,emailPass,confirmEmailRequest,emailStatus,
+  element('small','','Email lama tetap berlaku hingga tautan dikonfirmasi. Setelah berhasil, login ulang diperlukan dan notifikasi push perlu diaktifkan kembali.'));
+ wrap.append(sectionTitle,currentEmail,changeEmailToggle,changeBox);
+
+
  const themeTitle=element('label','','Tampilan TemanChat');
  const themeSelect=element('select');
  for(const [value,text] of [['system','Ikuti sistem'],['light','Terang · Glass'],['dark','Gelap · Glass']]){
@@ -419,9 +534,32 @@ function startCallTone(kind){
  play();tcToneLoop=setInterval(play,kind==='incoming'?2600:kind==='ringback'?2700:1900);
 }
 // --------- Panggilan suara dan video (WebRTC / signaling D1) ---------
-function callLabel(text){$('callState').textContent=text;if(/Terhubung|Menghubungkan/.test(text))stopCallTone();}
-function showCallUI(kind,name,incoming){
- const dlg=$('callDialog');$('callName').textContent=name||'TemanChat';$('callAvatar').textContent=avatar(name);
+function durationText(ms){
+ const s=Math.max(0,Math.floor(ms/1000));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%60;
+ return (h?String(h)+':':'')+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}
+function updateCallDuration(c){
+ if(!c||currentCall!==c||!c.connectedAt)return;
+ const label='Terhubung · '+durationText(Date.now()-c.connectedAt);
+ $('callState').textContent=label;
+ $('callStatusPill').textContent=label;
+}
+function markCallConnected(c){
+ if(!c||currentCall!==c)return;
+ if(!c.connectedAt){
+  c.connectedAt=Date.now();stopCallTone();
+  c.durationInterval=setInterval(()=>updateCallDuration(c),1000);
+ }
+ updateCallDuration(c);
+}
+function callLabel(text){
+ if(currentCall?.connectedAt&&!text.startsWith('Terhubung'))return;
+ $('callState').textContent=text;
+ $('callStatusPill').textContent=text;
+ if(/Terhubung|Menghubungkan/.test(text))stopCallTone();
+}
+function showCallUI(kind,name,incoming,username){
+ const dlg=$('callDialog');$('callName').textContent=name||'TemanChat';paintAvatar($('callAvatar'),name,username);
  $('callRemote').style.display='flex';$('callAvatar').style.display='grid';$('remoteVideo').style.display='none';$('localVideo').style.display='none';
  $('acceptCall').hidden=!incoming;$('cameraCall').hidden=kind!=='video';callLabel(incoming?'Panggilan masuk…':'Memanggil…');
  if(!dlg.open)dlg.showModal();
@@ -429,11 +567,12 @@ function showCallUI(kind,name,incoming){
 }
 function closeCallUI(){
  stopCallTone();
- const dlg=$('callDialog');if(dlg.open)dlg.close();$('localVideo').srcObject=null;$('remoteVideo').srcObject=null;
+ const dlg=$('callDialog');if(dlg.open)dlg.close();$('localVideo').srcObject=null;$('remoteVideo').srcObject=null;$('remoteAudio').srcObject=null;
  $('localVideo').style.display='none';$('remoteVideo').style.display='none';
 }
 function stopCallLocally(){
  const c=currentCall;if(!c)return;
+ if(c.durationInterval){clearInterval(c.durationInterval);c.durationInterval=null;}
  currentCall=null;
  if(c.pc){c.pc.onicecandidate=null;c.pc.ontrack=null;c.pc.close()}
  c.stream?.getTracks().forEach(t=>t.stop());closeCallUI();
@@ -450,9 +589,20 @@ async function preparePeer(c){
  if(currentCall!==c){stream.getTracks().forEach(t=>t.stop());return}
  c.stream=stream;c.pc=new RTCPeerConnection({iceServers:opts.iceServers});
  for(const track of stream.getTracks())c.pc.addTrack(track,stream);
- c.pc.ontrack=e=>{$('remoteVideo').srcObject=e.streams[0];$('remoteVideo').style.display='block';$('callRemote').style.display='none';$('remoteVideo').play().catch(()=>{});callLabel('Terhubung')};
+ c.pc.ontrack=e=>{
+  // Pisahkan elemen audio dan video: pada iPhone suara jangan ikut terhenti saat video disembunyikan.
+  const media=c.kind==='video'?$('remoteVideo'):$('remoteAudio');
+  media.srcObject=e.streams[0];
+  $('remoteVideo').style.display=c.kind==='video'?'block':'none';
+  $('callRemote').style.display=c.kind==='video'?'none':'flex';
+  media.play().catch(()=>{});
+ };
  c.pc.onicecandidate=e=>{if(!e.candidate||currentCall!==c)return;post('/api/calls/signal',{callId:c.id,kind:'candidate',payload:JSON.stringify(e.candidate.toJSON())}).catch(console.warn)};
- c.pc.onconnectionstatechange=()=>{if(currentCall!==c)return;const s=c.pc.connectionState;if(s==='connected')callLabel('Terhubung');if(['failed','closed'].includes(s)){toast('Koneksi panggilan terputus. TURN mungkin diperlukan.');hangup()}};
+ c.pc.onconnectionstatechange=()=>{
+  if(currentCall!==c)return;const state=c.pc.connectionState;
+  if(state==='connected')markCallConnected(c);
+  else if(['failed','closed'].includes(state)){toast('Koneksi panggilan terputus. TURN mungkin diperlukan.');void hangup();}
+ };
  if(c.kind==='video'){$('localVideo').srcObject=stream;$('localVideo').style.display='block';}
 }
 async function setRemote(c,description){
@@ -488,11 +638,12 @@ async function startCall(kind){
  try{if(tcAudioContext?.state==='suspended')await tcAudioContext.resume()}catch{}
  if(!active)return toast('Pilih teman terlebih dahulu.');
  if(currentCall)return toast('Masih ada panggilan aktif.');
+ if(!Number(active.call_unlocked||0))return toast('Saling bertukar pesan terlebih dahulu untuk memulai panggilan suara atau video.');
  if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)return toast('Browser ini belum mendukung WebRTC atau izin mikrofon/kamera.');
  try{
   const d=await post('/api/calls/start',{conversationId:active.id,kind});
   const c={id:d.callId,kind,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
-  showCallUI(kind,active.other_name,false);await preparePeer(c);if(currentCall!==c)return;
+  showCallUI(kind,active.other_name,false,active.other_username);await preparePeer(c);if(currentCall!==c)return;
   const offer=await c.pc.createOffer();await c.pc.setLocalDescription(offer);
   await post('/api/calls/signal',{callId:c.id,kind:'offer',payload:JSON.stringify(c.pc.localDescription)});
   toast('Panggilan dikirim. Penerima bisa menerima notifikasi push.');
@@ -508,7 +659,7 @@ $('acceptCall').onclick=async()=>{
 };
 async function checkIncoming(){
  if(checkingCalls||currentCall||document.hidden||!me)return;checkingCalls=true;
- try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true);(!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
+ try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true,d.call.caller_username);(!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
  catch(e){console.warn('Incoming call',e.message)}finally{checkingCalls=false}
 }
 let lastKnownCallId=null,callHistoryReady=false,lastHistoryCheck=0;
@@ -538,8 +689,8 @@ async function init(){
   const d=await api('/api/auth/me');me=d.user;
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
-  document.querySelector('.profile .avatar').textContent=avatar(me.display_name);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V6.9'));
+  paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.0'));
   placeholder('Cari username teman untuk memulai percakapan.');
   await fetchChats();
   const linkedChat=new URLSearchParams(location.search).get('chat');
