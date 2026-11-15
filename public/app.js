@@ -16,7 +16,12 @@ function applyTheme(choice){
  document.documentElement.dataset.theme=theme;
  try{localStorage.setItem(THEME_KEY,theme)}catch{}
  const dark=theme==='dark'||(theme==='system'&&matchMedia('(prefers-color-scheme:dark)').matches);
- const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.content=dark?'#101c29':'#b7e6dc';
+ const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.content=dark?'#151718':'#e9efec';
+ document.querySelectorAll('[data-tc-theme]').forEach(button=>{
+   const selected=button.dataset.tcTheme===theme;
+   button.setAttribute('aria-pressed',String(selected));
+   button.classList.toggle('is-active',selected);
+ });
 }
 applyTheme(localStorage.getItem(THEME_KEY)||'system');
 
@@ -437,8 +442,8 @@ async function hangup(){
  const c=currentCall;stopCallLocally();if(c)await post('/api/calls/decision',{callId:c.id,action:'hangup'}).catch(()=>{});
 }
 $('hangupCall').onclick=hangup;
-$('muteCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getAudioTracks())track.enabled=!track.enabled;$('muteCall').textContent=c.stream.getAudioTracks()[0]?.enabled?'🎙 Mikrofon':'🔇 Bisukan';};
-$('cameraCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getVideoTracks())track.enabled=!track.enabled;$('cameraCall').textContent=c.stream.getVideoTracks()[0]?.enabled?'▣ Kamera':'▣ Kamera mati';};
+$('muteCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getAudioTracks())track.enabled=!track.enabled;$('muteCall').querySelector('span').textContent=c.stream.getAudioTracks()[0]?.enabled?'Mikrofon aktif':'Mikrofon mati';};
+$('cameraCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getVideoTracks())track.enabled=!track.enabled;$('cameraCall').querySelector('span').textContent=c.stream.getVideoTracks()[0]?.enabled?'Kamera aktif':'Kamera mati';};
 async function preparePeer(c){
  const opts=await api('/api/calls/config');
  const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:c.kind==='video'});
@@ -534,7 +539,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   document.querySelector('.profile .avatar').textContent=avatar(me.display_name);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V6'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V6.9'));
   placeholder('Cari username teman untuk memulai percakapan.');
   await fetchChats();
   const linkedChat=new URLSearchParams(location.search).get('chat');
@@ -549,4 +554,15 @@ document.addEventListener('visibilitychange',()=>{
  if(!document.hidden){void fetchChats();if(active)void fetchMessages(true)}
 });
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(console.warn));
+// Mode tema dapat langsung diubah tanpa masuk ke Pengaturan.
+document.querySelectorAll('[data-tc-theme]').forEach(button=>{
+ button.addEventListener('click',()=>applyTheme(button.dataset.tcTheme));
+});
+applyTheme(localStorage.getItem(THEME_KEY)||'system');
+if(window.matchMedia){
+ const colorQuery=matchMedia('(prefers-color-scheme: dark)');
+ colorQuery.addEventListener?.('change',()=>{
+   if((localStorage.getItem(THEME_KEY)||'system')==='system')applyTheme('system');
+ });
+}
 init();

@@ -1,0 +1,27 @@
+TemanChat V6.9 — Glass Monokrom / UI Polish
+
+VERSI INI HANYA MERAPIKAN TAMPILAN; tidak mengubah backend, skema DB, atau push server.
+
+Yang berubah:
+- Glass gelap: dominan hitam dan abu, aksen hijau hanya pada aksi penting.
+- Glass terang: putih susu transparan dengan tulisan gelap yang jelas.
+- Tombol tema Terang / Gelap / Sistem muncul langsung pada sidebar.
+- Ikon outline SVG modern, tanpa ketergantungan CDN ikon.
+- Teks, placeholder, tombol, dan bubble chat memiliki kontras yang jelas.
+- Tampilan HP responsif, input >= 16px (menghindari zoom Safari saat mengetik).
+- Tombol panggilan, video, pengaturan, kirim, lampiran, kembali, riwayat, instal diperbarui.
+- Fitur lama tetap berasal dari kode V6.8: chat, Web Push, badge, centang, riwayat panggilan,
+  panggilan WebRTC, nama panggilan, opsi penyimpanan media.
+
+CARA PASANG:
+1) Cadangkan folder proyek lama di Windows.
+2) Ekstrak ZIP. Salin ISI ZIP ke Documents/GitHub/temanchat-app,
+   pilih Replace untuk file yang sama. JANGAN menghapus .git.
+3) GitHub Desktop > Changes > Commit: "TemanChat V6.9 UI Glass Monokrom" > Push origin.
+4) Cloudflare Workers > temanchat-app > Deployments > tunggu Ready.
+5) Buka TemanChat pada Chrome: Ctrl+Shift+R. Di iPhone PWA: tutup dan buka ulang dari ikon.
+6) Jika desain lama masih ter-cache, tutup semua jendela PWA; jangan langsung hapus data situs
+   karena dapat menghapus media lokal atau sesi akun.
+
+Tidak perlu memasukkan ulang VAPID, Turnstile, Resend, atau melakukan SQL.
+NOTA: Mode gelap/terang disimpan PER PERANGKAT dengan localStorage.
