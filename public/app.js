@@ -5,6 +5,10 @@ const TCS = window.TCStorage;
 let me=null,chats=[],active=null,lastId=0,searchResults=null,searchSeq=0;
 let pollTimer=null,busyMessages=false,busyChats=false,lastListUpdate=0,toastTimer,installPrompt=null;
 let mediaEnabled=false,currentCall=null,checkingCalls=false,callBusy=false;
+let replyTarget=null,mediaPrefs={mode:'none',noticeSeen:false},noticeShowing=false;
+let voiceRecorder=null,voiceStream=null,voiceChunks=[],voiceTimer=null,voiceStart=0,voiceElapsed=0;
+let voiceLocked=false,voicePendingStart=false,voicePressing=false,voicePressY=0,voicePressX=0,voiceCancelRequested=false;
+const MAX_VOICE_MS=180000;
 let presenceBusy=false,lastPresenceBeat=0;
 const PRESENCE_PING_MS=45000;
 // V7.2: indikator mengetik tidak mengirim konten dan tidak menyimpan histori.
@@ -307,46 +311,117 @@ async function fetchChats(){
   if(!$('search').value.trim()||searchResults===null)renderChats();
  }catch(e){toast(e.message)}finally{busyChats=false}
 }
+function shortReply(m){return String(m?.body||'Pesan').slice(0,100)}
+function clearReply(){replyTarget=null;$('replyPreview').hidden=true;$('replyPreviewText').textContent='';}
+function beginReply(m){if(!active||!m)return;replyTarget={id:Number(m.id),body:shortReply(m)};
+ $('replyPreviewText').textContent=replyTarget.body;$('replyPreview').hidden=false;
+ try{$('messageInput').focus({preventScroll:true})}catch{$('messageInput').focus()}
+}
+$('replyCancel').onclick=clearReply;
+async function updateMediaPrefs(values){const p=await post('/api/media/preferences',values);mediaPrefs={mode:p.mode,noticeSeen:p.noticeSeen};TCS.setPref(p.mode);return p;}
+async function maybePhotoNotice(messages){
+ if(!me||mediaPrefs.noticeSeen||noticeShowing||!Array.isArray(messages))return;
+ const photo=messages.some(m=>m.sender_id!==me.id&&typeof m.mime_type==='string'&&m.mime_type.startsWith('image/'));
+ if(!photo||document.querySelector('dialog[open]'))return;
+ noticeShowing=true;
+ if(!$('mediaNoticeDialog').open)$('mediaNoticeDialog').showModal();
+}
+async function closePhotoNotice(openSettings=false){
+ try{await updateMediaPrefs({ackNotice:true})}catch(e){toast('Belum bisa menyimpan pilihan: '+e.message);return}
+ $('mediaNoticeDialog').close();noticeShowing=false;
+ if(openSettings)$('settingsBtn').click();
+}
+$('mediaNoticeUnderstand').onclick=()=>void closePhotoNotice(false);
+$('mediaNoticeSettings').onclick=()=>void closePhotoNotice(true);
+$('mediaNoticeDialog').addEventListener('cancel',event=>{event.preventDefault();});
+async function uploadMediaFile(file,id,replyId){
+ if(!mediaEnabled)throw Error('Penyimpanan R2 belum aktif.');
+ const mime=(file.type||'').split(';')[0];
+ const cap=mime.startsWith('audio/')?25:20;
+ if(file.size>cap*1024*1024)throw Error('Ukuran file melebihi '+cap+' MB.');
+ const init=await post('/api/media/init',{conversationId:id,name:file.name,type:mime,size:file.size});
+ const r=await fetch('/api/media/upload?id='+encodeURIComponent(init.mediaId),{
+  method:'PUT',credentials:'same-origin',headers:{'Content-Type':mime},body:file});
+ const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Upload gagal');
+ return post('/api/media/send',{conversationId:id,mediaId:init.mediaId,replyToId:replyId});
+}
 async function openMedia(messageId,m,area){
  if(!me)return;
  try{
   let local=await TCS.get(me.id,messageId).catch(()=>null),blob=local?.blob;
   if(!blob){
    const r=await fetch('/api/media/file?messageId='+encodeURIComponent(messageId),{credentials:'same-origin',cache:'no-store'});
-   if(r.ok){blob=await r.blob();await TCS.put(me.id,messageId,blob,TCS.pref()==='local').catch(()=>{});}
-   else{
-    const b=await api('/api/media/backup?messageId='+encodeURIComponent(messageId));
-    if(b.backup?.storage_type==='google_drive')blob=await TCS.downloadDrive(b.backup.storage_ref);
-    else throw Error('Media sudah tidak tersedia. Penerima belum menyimpan salinannya.');
-   }
+   if(r.ok){blob=await r.blob();await TCS.put(me.id,messageId,blob,false).catch(()=>{});}
+   else throw Error('Media sudah tidak tersedia di server. Gunakan salinan yang sebelumnya kamu simpan.');
   }
   if(!blob)return;
   const uri=URL.createObjectURL(blob);
-  const preview=blob.type.startsWith('image/')?element('img'):blob.type.startsWith('video/')?element('video'):element('div','tc-hint','Dokumen siap diunduh');
-  if(preview.tagName==='IMG'){preview.src=uri;preview.alt='Foto dalam percakapan';preview.onload=()=>{};}
-  if(preview.tagName==='VIDEO'){preview.src=uri;preview.controls=true;preview.playsInline=true;}
-  area.querySelector('.tc-preview')?.replaceChildren(preview);
-  const actions=area.querySelector('.tc-actions');actions.replaceChildren();
-  const save=element('button','tc-media-action','Simpan ke perangkat');save.onclick=async()=>{
-   try{
-    await TCS.put(me.id,messageId,blob,true);
-    const a=document.createElement('a');a.href=uri;a.download=(m.mime_type||blob.type).startsWith('video/')?'temanchat-video.webm':'temanchat-media';a.click();
-    toast('Media disimpan di aplikasi. Periksa folder unduhan jika ingin salinan di galeri.');
-   }catch(e){toast(e.message)}
+  const mime=m.mime_type||blob.type;
+  const isAudio=mime.startsWith('audio/'),isVideo=mime.startsWith('video/');
+  const preview=blob.type.startsWith('image/')?element('img'):
+   isVideo?element('video'):isAudio?element('audio'):element('div','tc-hint','Dokumen siap disimpan');
+  if(['IMG','VIDEO','AUDIO'].includes(preview.tagName)){
+   preview.src=uri;
+   if(preview.tagName==='IMG')preview.alt='Foto dalam percakapan';
+   else{preview.controls=true;preview.preload='metadata';}
+   if(preview.tagName==='VIDEO')preview.playsInline=true;
+  }
+  const box=area.querySelector('.tc-preview');
+  const old=box.querySelector('img,video,audio');if(old?.src?.startsWith('blob:'))URL.revokeObjectURL(old.src);
+  box.replaceChildren(preview);
+  const actions=area.querySelector('.tc-actions');actions.replaceChildren();actions.hidden=true;
+  const fileName=isAudio?'TemanChat-suara-'+messageId+'.'+(mime==='audio/mp4'?'m4a':'webm'):
+   isVideo?'TemanChat-video-'+messageId+'.mp4':mime.startsWith('image/')?'TemanChat-foto-'+messageId+'.jpg':'TemanChat-file-'+messageId;
+  const save=element('button','tc-media-action','Simpan ke perangkat');
+  save.onclick=async()=>{
+   try{await TCS.saveManual(blob,fileName);await TCS.put(me.id,messageId,blob,true).catch(()=>{});
+    toast('Proses penyimpanan dimulai. Periksa dialog atau folder perangkat.');}
+   catch(e){if(e.name!=='AbortError')toast(e.message)}
   };actions.append(save);
-  if(TCS.pref()==='google_drive'&&TCS.getClientId()&&m.sender_id!==me.id){
-   const drive=element('button','tc-media-action','Backup ke Google Drive');
+  const permanent=element('button','tc-media-action','Simpan di aplikasi (offline)');
+  permanent.onclick=async()=>{try{await TCS.put(me.id,messageId,blob,true);toast('Salinan disimpan di penyimpanan aplikasi. Tidak otomatis masuk galeri.')}catch(e){toast(e.message)}};
+  actions.append(permanent);
+  if(TCS.getClientId()){
+   const drive=element('button','tc-media-action','Simpan ke Google Drive');
    drive.onclick=async()=>{
-    drive.disabled=true;drive.textContent='Mencadangkan…';
-    try{
-     const d=await TCS.uploadDrive(blob,'media-'+messageId);
-     await post('/api/media/confirm',{messageId,storageType:'google_drive',driveFileId:d.fileId,accessToken:d.accessToken});
-     await TCS.verified(me.id,messageId);toast('Backup Drive terverifikasi. Media transit R2 sudah dibersihkan.');
-     drive.textContent='Tersimpan di Drive ✓';
-    }catch(e){toast(e.message);drive.disabled=false;drive.textContent='Coba backup lagi'}
+    drive.disabled=true;
+    try{const b=await TCS.uploadDrive(blob,fileName);
+      // Backup Drive milik penerima tidak menghapus R2 secara prematur.
+      if(m.sender_id!==me.id){await post('/api/media/confirm',{messageId,storageType:'google_drive',driveFileId:b.fileId,accessToken:b.accessToken});}
+      await TCS.verified(me.id,messageId);toast('Salinan Google Drive terverifikasi.');
+    }catch(e){toast(e.message)}finally{drive.disabled=false}
    };actions.append(drive);
   }
+  if(TCS.pref()==='local'){
+   try{await TCS.put(me.id,messageId,blob,true);
+    if(TCS.supportsFolder())await TCS.autoSaveFolder(blob,fileName);
+   }catch(e){console.warn('Penyimpanan otomatis lokal:',e.message)}
+  }
+  if(TCS.pref()==='google_drive'&&TCS.getClientId()&&TCS.wifi()){
+   // Hanya jika token Google sudah pernah diizinkan dalam sesi browser ini.
+   // Jangan meminta login Google otomatis ketika membuka media.
+   console.info('Backup Google Drive: gunakan tombol Simpan ke Google Drive untuk memberi izin.');
+  }
  }catch(e){toast(e.message)}
+}
+// Mode lokal: saat media baru diunduh oleh aplikasi aktif, simpan salinan permanen di
+// IndexedDB. Folder khusus hanya ditulis jika izin akses telah diberikan sebelumnya.
+// Tidak bisa menulis diam-diam ke galeri iPhone/Android ketika PWA tertutup.
+const autoStored=new Set();
+async function tryAutoLocal(m){
+ if(mediaPrefs.mode!=='local'||!me||m.sender_id===me.id||!m.media_id||autoStored.has(m.id))return;
+ autoStored.add(m.id);
+ try{
+  const existing=await TCS.get(me.id,m.id).catch(()=>null);
+  if(existing?.permanent)return;
+  const r=await fetch('/api/media/file?messageId='+encodeURIComponent(m.id),{credentials:'same-origin',cache:'no-store'});
+  if(!r.ok)throw Error('Media tidak tersedia');
+  const blob=await r.blob();await TCS.put(me.id,m.id,blob,true);
+  if(TCS.supportsFolder()){
+   const name='TemanChat-'+m.id+(m.mime_type?.startsWith('image/')?'.jpg':m.mime_type?.startsWith('audio/')?'.m4a':'.bin');
+   try{await TCS.autoSaveFolder(blob,name)}catch(e){console.info('Penyimpanan folder belum diizinkan:',e.message)}
+  }
+ }catch(e){autoStored.delete(m.id);console.warn('Penyimpanan lokal otomatis:',e.message)}
 }
 function setReceiptLabel(node,kind){
  const read=kind==='read',received=kind==='delivered';
@@ -375,12 +450,29 @@ async function markVisibleRead(chatId,lastSeen){
 function addMessage(m){
  if($('messages').querySelector(`[data-message-id="${Number(m.id)}"]`))return;
  const b=element('div','bubble '+(m.sender_id===me.id?'me':'them'));b.dataset.messageId=String(m.id);
- b.append(element('span','',m.body));
+ if(m.reply_to_id){
+  const q=element('div','tc-reply-quote');q.append(element('small','',m.reply_sender_id===me.id?'Membalas kamu':'Membalas teman'),element('span','',String(m.reply_body||'Pesan sebelumnya').slice(0,140)));
+  q.onclick=()=>{const target=$('messages').querySelector(`[data-message-id="${Number(m.reply_to_id)}"]`);if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.classList.add('tc-flash');setTimeout(()=>target.classList.remove('tc-flash'),900)}};
+  b.append(q);
+ }
+ b.append(element('span','tc-message-text',m.body));
+ const menuWrap=element('div','tc-message-menu');
+ const menuButton=element('button','tc-message-more','⋯');menuButton.type='button';menuButton.title='Tindakan pesan';menuButton.setAttribute('aria-label','Tindakan pesan');
+ const menu=element('div','tc-message-menu-items');menu.hidden=true;
+ const reply=element('button','','↩ Balas pesan');reply.type='button';reply.onclick=()=>{beginReply(m);menu.hidden=true};
+ menu.append(reply);menuButton.onclick=e=>{e.stopPropagation();menu.hidden=!menu.hidden};
+ menuWrap.append(menuButton,menu);b.append(menuWrap);
+ let touchX=0,touchY=0;
+ b.addEventListener('touchstart',e=>{if(e.target.closest('button,a,audio,video,input'))return;touchX=e.touches[0]?.clientX||0;touchY=e.touches[0]?.clientY||0;},{passive:true});
+ b.addEventListener('touchend',e=>{if(!touchX)return;const touch=e.changedTouches[0];const dx=(touch?.clientX||0)-touchX,dy=(touch?.clientY||0)-touchY;
+  if(dx>65&&Math.abs(dy)<55)beginReply(m);touchX=0;},{passive:true});
  if(m.media_id){
   const area=element('div','tc-bubble-media');
-  const view=element('button','tc-media-action','Buka media');view.onclick=()=>openMedia(m.id,m,area);
+  const view=element('button','tc-media-action',m.mime_type?.startsWith('audio/')?'▶ Putar pesan suara':'Buka media');view.onclick=()=>openMedia(m.id,m,area);
   const preview=element('div','tc-preview'),actions=element('div','tc-actions');
-  area.append(view,preview,actions);b.append(area);
+  const mediaDots=element('button','tc-media-dots','⋯');mediaDots.type='button';mediaDots.title='Pilihan penyimpanan';
+  mediaDots.onclick=()=>{actions.hidden=!actions.hidden;if(!actions.hidden&&!actions.children.length)void openMedia(m.id,m,area)};
+  actions.hidden=true;area.append(view,preview,mediaDots,actions);b.append(area);
  }
  const foot=element('div','tc-bubble-foot');
  foot.append(element('time','',smallTime(m.created_at)));
@@ -401,7 +493,8 @@ async function fetchMessages(reset=false){
   if(!active||active.id!==id)return;
   if(reset){$('messages').replaceChildren();lastId=0;if(!d.messages.length)placeholder('Belum ada pesan. Mulai percakapan!')}
   if(d.messages.length&&$('messages').querySelector('.day'))$('messages').replaceChildren();
-  for(const m of d.messages)addMessage(m);
+  for(const m of d.messages){addMessage(m);if(mediaPrefs.mode==='local'&&m.media_id)void tryAutoLocal(m)}
+  void maybePhotoNotice(d.messages);
   updateAllReceipts(Number(d.partnerReceipt?.deliveredId||0),Number(d.partnerReceipt?.readId||0));
   // Jangan tandai pesan sendiri sebagai dibaca; server mengabaikan pesan sendiri.
   const received=d.messages.filter(m=>m.sender_id!==me.id);
@@ -410,8 +503,9 @@ async function fetchMessages(reset=false){
  }catch(e){toast(e.message)}finally{busyMessages=false}
 }
 async function selectChat(c){
+ if(active?.id!==c.id&&(voiceRecorder||voicePendingStart))void voiceFinish(false);
  if(active?.id!==c.id){stopTyping();partnerTyping=false;}
- active=c;lastId=0;updateHeader(c);drawPartnerTyping();renderChats();
+ clearReply();active=c;lastId=0;updateHeader(c);drawPartnerTyping();renderChats();
  placeholder('Memuat pesan…');showChat();
  void refreshPartnerTyping();
  await fetchMessages(true);
@@ -427,23 +521,114 @@ $('messageInput').addEventListener('blur',stopTyping);
 $('messageForm').addEventListener('submit',async e=>{
  e.preventDefault();const input=$('messageInput'),msg=input.value.trim(),id=active?.id;
  if(!id||!msg||msg.length>1000)return;const sendBtn=document.querySelector('.send');sendBtn.disabled=true;
- try{const d=await post('/api/chat/send',{conversationId:id,body:msg});input.value='';stopTyping();if(active?.id===id){if($('messages').querySelector('.day'))$('messages').replaceChildren();addMessage({...d.message,delivery_status:'sent'})}await fetchChats();}
+ try{const d=await post('/api/chat/send',{conversationId:id,body:msg,replyToId:replyTarget?.id||null});input.value='';clearReply();stopTyping();if(active?.id===id){if($('messages').querySelector('.day'))$('messages').replaceChildren();addMessage({...d.message,delivery_status:'sent'})}await fetchChats();}
  catch(e){toast(e.message)}finally{sendBtn.disabled=!active;if(active?.id===id&&!document.hidden){try{input.focus({preventScroll:true})}catch{input.focus()}}}
 });
 $('attachmentInput').addEventListener('change',async()=>{
- const file=$('attachmentInput').files[0],id=active?.id;$('attachmentInput').value='';if(!file||!id)return;
- if(!mediaEnabled){toast('R2 belum terhubung. Foto akan aktif setelah bucket MEDIA disiapkan.');return}
- if(file.size>20*1024*1024){toast('File maksimal 20 MB.');return}
+ const file=$('attachmentInput').files[0],id=active?.id;
+ $('attachmentInput').value='';if(!file||!id)return;
  try{
   toast('Mengunggah media…');
-  const init=await post('/api/media/init',{conversationId:id,name:file.name,type:file.type,size:file.size});
-  const r=await fetch('/api/media/upload?id='+encodeURIComponent(init.mediaId),{method:'PUT',credentials:'same-origin',headers:{'Content-Type':file.type},body:file});
-  const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Gagal mengunggah media');
-  const sent=await post('/api/media/send',{conversationId:id,mediaId:init.mediaId});
-  if(active?.id===id){if($('messages').querySelector('.day'))$('messages').replaceChildren();addMessage(sent.message)}
-  toast('Media terkirim. File asli di galeri tidak dihapus.');await fetchChats();
+  const result=await uploadMediaFile(file,id,replyTarget?.id||null);
+  if(active?.id===id){clearReply();if($('messages').querySelector('.day'))$('messages').replaceChildren();addMessage(result.message)}
+  toast('Media terkirim. File asli perangkat tidak dihapus.');await fetchChats();
  }catch(e){toast(e.message)}
 });
+// V7.4 pesan suara: tahan > geser atas untuk kunci; lepaskan untuk kirim;
+// geser kiri untuk batal. Desktop: klik sekali mulai, klik lagi mengirim.
+let voiceChatId=null,voiceUploadOnStop=false,voiceStartRequest=0;
+function voiceClock(ms){const secs=Math.floor(Math.max(0,ms)/1000);return String(Math.floor(secs/60)).padStart(2,'0')+':'+String(secs%60).padStart(2,'0')}
+function voiceRefreshUI(){
+ $('voicePanel').hidden=!voicePendingStart&&!voiceRecorder;
+ const elapsed=voiceElapsed+(voiceRecorder?.state==='recording'?Date.now()-voiceStart:0);
+ $('voiceTime').textContent=voiceClock(elapsed);
+ $('voiceStatus').textContent=voicePendingStart?'Meminta izin mikrofon…':voiceLocked?'🔒 Rekaman terkunci':'🔴 Merekam suara…';
+ $('voiceHint').hidden=voiceLocked;
+ $('voicePause').hidden=!voiceLocked;
+ $('voiceSend').hidden=!voiceLocked;
+ $('voicePause').textContent=voiceRecorder?.state==='paused'?'Lanjut':'Jeda';
+}
+function voiceStopTracks(){clearInterval(voiceTimer);voiceTimer=null;voiceStream?.getTracks().forEach(t=>t.stop());voiceStream=null;}
+async function beginVoiceRecording(){
+ if(voicePendingStart||voiceRecorder)return;
+ if(!active||!mediaEnabled)return toast('Pilih percakapan dan aktifkan R2 dahulu.');
+ if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined')return toast('Browser ini tidak mendukung rekaman pesan suara.');
+ voicePendingStart=true;voiceCancelRequested=false;voiceLocked=false;voiceChunks=[];voiceElapsed=0;voiceChatId=active.id;
+ const request=++voiceStartRequest;
+ voiceRefreshUI();
+ try{
+  // getUserMedia dipanggil langsung dari interaksi agar izin iPhone dapat muncul.
+  const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+  if(voiceCancelRequested||request!==voiceStartRequest){stream.getTracks().forEach(t=>t.stop());return;}
+  voiceStream=stream;
+  const format=['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t));
+  const rec=new MediaRecorder(stream,format?{mimeType:format}:undefined);
+  voiceRecorder=rec;
+  rec.ondataavailable=e=>{if(e.data?.size)voiceChunks.push(e.data)};
+  rec.onerror=()=>{toast('Perekaman mikrofon gagal.');void voiceFinish(false)};
+  rec.onstop=async()=>{
+   const send=voiceUploadOnStop&&!voiceCancelRequested;
+   const recorded=new Blob(voiceChunks,{type:rec.mimeType||format||'audio/webm'});
+   const chatId=voiceChatId,replyId=replyTarget?.id||null;
+   voiceStopTracks();voiceRecorder=null;voiceChunks=[];voicePendingStart=false;voiceLocked=false;voiceUploadOnStop=false;
+   voiceRefreshUI();
+   if(!send)return;
+   if(recorded.size<150)return toast('Rekaman terlalu singkat.');
+   const type=(recorded.type||'audio/webm').split(';')[0];
+   const ext=type==='audio/mp4'?'m4a':type==='audio/ogg'?'ogg':type==='audio/wav'?'wav':'webm';
+   const file=new File([recorded],'TemanChat-suara-'+Date.now()+'.'+ext,{type});
+   try{
+    toast('Mengirim pesan suara…');const result=await uploadMediaFile(file,chatId,replyId);
+    if(active?.id===chatId){clearReply();if($('messages').querySelector('.day'))$('messages').replaceChildren();addMessage(result.message)}
+    await fetchChats();toast('Pesan suara terkirim.');
+   }catch(e){toast('Gagal mengirim pesan suara: '+e.message)}
+  };
+  voicePendingStart=false;rec.start(300);voiceStart=Date.now();voiceElapsed=0;
+  voiceTimer=setInterval(()=>{
+   voiceRefreshUI();
+   const total=voiceElapsed+(rec.state==='recording'?Date.now()-voiceStart:0);
+   if(total>=MAX_VOICE_MS)void voiceFinish(true);
+  },250);
+  voiceRefreshUI();
+  if(!voicePressing&&!voiceLocked){setTimeout(()=>{if(voiceRecorder===rec&&!voicePressing&&!voiceLocked)void voiceFinish(true)},500)}
+ }catch(e){voiceStopTracks();voicePendingStart=false;voiceRecorder=null;voiceRefreshUI();toast('Mikrofon tidak dapat digunakan: '+e.message)}
+}
+async function voiceFinish(send){
+ if(voicePendingStart&&!voiceRecorder){voiceCancelRequested=!send;voicePendingStart=false;voiceRefreshUI();return}
+ if(!voiceRecorder||voiceRecorder.state==='inactive')return;
+ voiceUploadOnStop=!!send;voiceCancelRequested=!send;
+ try{
+  if(voiceRecorder.state==='paused')voiceRecorder.resume();
+  voiceRecorder.requestData();voiceRecorder.stop();
+ }catch(e){voiceStopTracks();voiceRecorder=null;voiceRefreshUI();toast('Perekaman berhenti: '+e.message)}
+}
+function voiceLock(){if(!voiceRecorder&&!voicePendingStart)return;voiceLocked=true;voiceRefreshUI();}
+$('voiceCancel').onclick=()=>void voiceFinish(false);
+$('voiceSend').onclick=()=>void voiceFinish(true);
+$('voicePause').onclick=()=>{
+ const r=voiceRecorder;if(!r)return;
+ try{if(r.state==='recording'){voiceElapsed+=Date.now()-voiceStart;r.pause()}else if(r.state==='paused'){voiceStart=Date.now();r.resume()}}
+ catch(e){toast(e.message)}
+ voiceRefreshUI();
+};
+const mic=$('voiceMessageBtn');
+mic.addEventListener('pointerdown',e=>{
+ if(e.pointerType==='mouse')return;
+ e.preventDefault();voicePressing=true;voicePressY=e.clientY;voicePressX=e.clientX;
+ mic.setPointerCapture?.(e.pointerId);void beginVoiceRecording();
+});
+mic.addEventListener('pointermove',e=>{
+ if(!voicePressing||e.pointerType==='mouse')return;
+ if(e.clientX-voicePressX < -80){voicePressing=false;void voiceFinish(false);return}
+ if(voicePressY-e.clientY>65){voicePressing=false;voiceLock()}
+});
+mic.addEventListener('pointerup',e=>{if(e.pointerType==='mouse')return;
+ e.preventDefault();if(voicePressing){voicePressing=false;if(!voiceLocked)void voiceFinish(true)}
+});
+mic.addEventListener('pointercancel',()=>{if(voicePressing&&!voiceLocked){voicePressing=false;void voiceFinish(false)}});
+mic.onclick=e=>{if(e.detail===0||e.pointerType==='mouse'){
+ if(voiceRecorder||voicePendingStart)void voiceFinish(true);else{voicePressing=false;void beginVoiceRecording().then(()=>{if(voiceRecorder){voiceLocked=true;voiceRefreshUI()}});}
+}};
 $('attachBtn').onclick=()=>{if(!mediaEnabled)toast('Untuk mengirim foto, hubungkan Cloudflare R2 lebih dahulu.');else $('attachmentInput').click()};
 function modal(title,text,buttons=[]){$('modalTitle').textContent=title;$('modalDesc').textContent=text;const c=$('modalContent');c.replaceChildren();for(const b of buttons){const btn=element('button','primary',b.label);btn.onclick=b.action;c.append(btn)}$('modal').showModal();}
 $('closeModal').onclick=()=>$('modal').close();
@@ -567,12 +752,33 @@ $('settingsBtn').onclick=()=>{
  themeSelect.value=localStorage.getItem(THEME_KEY)||'system';themeSelect.onchange=()=>applyTheme(themeSelect.value);
  wrap.append(themeTitle,themeSelect,element('small','','Efek kaca disesuaikan dengan tema, kontras, dan pengaturan aksesibilitas perangkat.'));
 
+ const section=element('details','tc-storage-guide');section.open=false;
+ const guideTitle=element('summary','','Panduan Penyimpanan & Media');
+ section.append(guideTitle,element('p','','Bawaan: tidak simpan otomatis. Foto/video sementara dapat kedaluwarsa setelah sekitar 3 hari. Pilih menu ⋯ pada media untuk menyimpan file tertentu. Cache sementara bukan galeri perangkat; file asli di galeri tidak dihapus.'));
+ wrap.append(section);
  const select=element('select');
- for(const [v,t] of [['local','Lokal perangkat'],['google_drive','Google Drive pribadi']]){const o=element('option','',t);o.value=v;select.append(o)}
- select.value=TCS.pref();select.onchange=()=>{TCS.setPref(select.value);toast(select.value==='local'?'Penyimpanan lokal dipilih. Media di browser bisa hilang bila data situs dihapus.':'Google Drive dipilih. Backup butuh izin Google dan Wi-Fi yang bisa diverifikasi.')};
- wrap.append(label,select,element('small','Foto dikirim dari perangkat, bukan dipilih dari Google Drive. Cache cloud dibersihkan 3 hari setelah backup berhasil; mode lokal tidak ikut dibersihkan otomatis.'));
- if(!TCS.getClientId())wrap.append(element('small','','Integrasi Google Drive belum dikonfigurasi. Sampai disiapkan, gunakan Lokal.'));
- else {const connect=element('button','primary','Hubungkan Google Drive');connect.onclick=async()=>{try{await TCS.connectGoogle();toast('Google Drive terhubung untuk sesi browser ini.')}catch(e){toast(e.message)}};wrap.append(connect)}
+ for(const [v,t] of [['none','Tidak simpan otomatis (bawaan)'],['local','Simpan ke perangkat / folder pilihan'],['google_drive','Google Drive pribadi (perlu OAuth)'],['nextcloud','Nextcloud / CasaOS (belum aktif)']]){
+  const option=element('option','',t);option.value=v;select.append(option);
+ }
+ select.value=mediaPrefs.mode;
+ select.onchange=async()=>{
+  const mode=select.value;
+  if(mode==='nextcloud'){select.value=mediaPrefs.mode;toast('Integrasi Nextcloud belum diaktifkan, pengaturan tidak diubah.');return;}
+  if(mode==='google_drive'&&!TCS.getClientId()){select.value=mediaPrefs.mode;toast('OAuth Google Drive belum dikonfigurasi. Mode tidak diubah.');return;}
+  select.disabled=true;
+  try{await updateMediaPrefs({mode});toast('Pilihan penyimpanan disimpan di akun.');}
+  catch(e){select.value=mediaPrefs.mode;toast(e.message)}finally{select.disabled=false}
+ };
+ wrap.append(label,select,element('small','','Pilihan berlaku untuk akun. Pada iPhone, browser dapat meminta konfirmasi penyimpanan. File di browser bisa hilang jika data situs dihapus.'));
+ if(TCS.supportsFolder()){
+  const choose=element('button','primary','Pilih folder penyimpanan perangkat');
+  choose.onclick=async()=>{try{const name=await TCS.chooseFolder();toast('Folder '+name+' dipilih. Izin dapat perlu diperbarui.')}catch(e){if(e.name!=='AbortError')toast(e.message)}};
+  wrap.append(choose);
+ }else wrap.append(element('small','','Perangkat ini tidak mendukung penyimpanan otomatis ke folder tertentu. Simpan file manual melalui menu ⋯ pada media.'));
+ if(TCS.getClientId()){
+  const connect=element('button','primary','Hubungkan Google Drive');connect.onclick=async()=>{try{await TCS.connectGoogle();toast('Google Drive terhubung untuk sesi browser ini.')}catch(e){toast(e.message)}};wrap.append(connect);
+ }else wrap.append(element('small','','Google Drive belum diaktifkan (OAuth Client ID belum tersedia). Belum ada backup cloud otomatis.'));
+ wrap.append(element('small','','Simpan permanen ke Nextcloud memerlukan konektor server tambahan. Tidak dianggap sudah tersimpan sebelum konektor benar-benar tersedia.'));
  const notifyButton=element('button','primary','Memeriksa notifikasi…');
  const showPushState=async()=>{
    let enabled=false;
@@ -852,10 +1058,14 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.3'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.4'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
+  try{const preferences=await api('/api/media/preferences');
+    mediaPrefs={mode:preferences.mode||'none',noticeSeen:!!preferences.noticeSeen};
+    TCS.setPref(mediaPrefs.mode);
+  }catch(e){console.warn('Preferensi media:',e.message)}
   await fetchChats();
   setTimeout(refreshInstallOffer,1300);
   const linkedChat=new URLSearchParams(location.search).get('chat');

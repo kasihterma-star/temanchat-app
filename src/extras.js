@@ -1,4 +1,5 @@
-// TemanChat V6: media transit (R2) dan signaling panggilan (D1).
+// TemanChat V7.4: media transit (R2), audio voice notes, preferensi, panggilan.
+import { validateReply, storeReply } from './replies.js';
 // Tabel tambahan dibuat otomatis saat endpoint V6 pertama kali dipakai.
 let schemaPromise;
 export function ensureExtras(env) {
@@ -27,6 +28,13 @@ export function ensureExtras(env) {
          FOREIGN KEY(media_id) REFERENCES tc_media_items(id) ON DELETE CASCADE
        )`,
       `CREATE INDEX IF NOT EXISTS idx_tc_media_chat ON tc_media_links(chat_id)`,
+      `CREATE TABLE IF NOT EXISTS tc_media_preferences (
+        user_id TEXT PRIMARY KEY,
+        save_mode TEXT NOT NULL DEFAULT 'none' CHECK(save_mode IN ('none','local','google_drive','nextcloud')),
+        notice_seen_at TEXT,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`,
       `CREATE TABLE IF NOT EXISTS tc_media_backups (
          media_id TEXT NOT NULL, user_id TEXT NOT NULL,
          storage_type TEXT NOT NULL, storage_ref TEXT NOT NULL,
@@ -63,8 +71,9 @@ const res = (o, status=200) => Response.json(o,{status,headers:{'Cache-Control':
 const bad = (text,status=400) => res({ok:false,error:text},status);
 const trimmed = x => String(x ?? '').trim();
 const UUID = /^[0-9a-f-]{36}$/;
-const MAX_MEDIA = 20*1024*1024;
-const ALLOWED = new Set(['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','application/pdf']);
+const MAX_MEDIA = 25*1024*1024; // audio 25 MB, foto dan video 20 MB sampai multipart tersedia
+const ALLOWED = new Set(['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','application/pdf','audio/webm','audio/mp4','audio/ogg','audio/wav','audio/mpeg']);
+const MAX_GENERAL=20*1024*1024;
 async function member(env,id,user){
  if(!UUID.test(id)) return null;
  return env.DB.prepare('SELECT id,user_a,user_b FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)')
@@ -94,18 +103,35 @@ export async function handleExtra(request, env, me, deps){
  if(write&&!deps.allowOrigin(request))return bad('Origin tidak diizinkan.',403);
  // Pemeriksaan skema otomatis. Tidak mengubah 12 tabel lama.
  await ensureExtras(env);
- if(p==='/api/media/config'&&request.method==='GET')return res({ok:true,enabled:!!env.MEDIA,maxBytes:MAX_MEDIA});
+ if(p==='/api/media/config'&&request.method==='GET')return res({ok:true,enabled:!!env.MEDIA,maxBytes:MAX_GENERAL,maxVoiceBytes:MAX_MEDIA});
+ if(p==='/api/media/preferences'&&request.method==='GET'){
+   const r=await env.DB.prepare('SELECT save_mode,notice_seen_at FROM tc_media_preferences WHERE user_id=?').bind(me.id).first();
+   return res({ok:true,mode:r?.save_mode||'none',noticeSeen:!!r?.notice_seen_at});
+ }
+ if(p==='/api/media/preferences'&&request.method==='POST'){
+   const d=await deps.readJSON(request,1600);
+   if(d.mode!==undefined&&!['none','local','google_drive','nextcloud'].includes(d.mode))return bad('Pilihan penyimpanan tidak valid.');
+   const before=await env.DB.prepare('SELECT save_mode,notice_seen_at FROM tc_media_preferences WHERE user_id=?').bind(me.id).first();
+   const mode=d.mode===undefined?(before?.save_mode||'none'):d.mode;
+   await env.DB.prepare(`INSERT INTO tc_media_preferences(user_id,save_mode,notice_seen_at)
+     VALUES(?,?,CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END)
+     ON CONFLICT(user_id) DO UPDATE SET save_mode=excluded.save_mode,
+       notice_seen_at=CASE WHEN ? THEN COALESCE(tc_media_preferences.notice_seen_at,CURRENT_TIMESTAMP)
+         ELSE tc_media_preferences.notice_seen_at END,updated_at=CURRENT_TIMESTAMP`)
+     .bind(me.id,mode,d.ackNotice===true?1:0,d.ackNotice===true?1:0).run();
+   return res({ok:true,mode,noticeSeen:!!before?.notice_seen_at||d.ackNotice===true});
+ }
  if(p.startsWith('/api/media/')){
   if(!env.MEDIA)return bad('Penyimpanan R2 belum dihubungkan. Chat teks tetap berfungsi.',503);
   if(p==='/api/media/init'&&request.method==='POST'){
    const d=await deps.readJSON(request), chatId=trimmed(d.conversationId);
    if(!await member(env,chatId,me.id))return bad('Percakapan tidak ditemukan.',404);
    const mime=trimmed(d.type).toLowerCase(),size=Number(d.size),name=trimmed(d.name).slice(0,100);
-   if(!ALLOWED.has(mime)||!Number.isSafeInteger(size)||size<1||size>MAX_MEDIA)return bad('Jenis atau ukuran file tidak didukung (maksimal 20 MB).');
+   if(!ALLOWED.has(mime)||!Number.isSafeInteger(size)||size<1||size>(mime.startsWith('audio/')?MAX_MEDIA:MAX_GENERAL))return bad('Jenis atau ukuran file tidak didukung (foto/video maks 20 MB, audio maks 25 MB).');
    if(!await deps.limit(request,env,'media-init',30))return bad('Terlalu banyak unggahan.',429);
    const mediaId=crypto.randomUUID(),key=`chats/${chatId}/${mediaId}`;
    await env.DB.prepare(`INSERT INTO tc_media_items(id,uploader_id,object_key,file_name,mime_type,file_size,status,expires_at)
-     VALUES(?,?,?,?,?,?,'pending',datetime('now','+30 days'))`).bind(mediaId,me.id,key,name||'media',mime,size).run();
+     VALUES(?,?,?,?,?,?,'pending',datetime('now','+3 days'))`).bind(mediaId,me.id,key,name||'media',mime,size).run();
    return res({ok:true,mediaId});
   }
   if(p==='/api/media/upload'&&request.method==='PUT'){
@@ -129,13 +155,25 @@ export async function handleExtra(request, env, me, deps){
    if(!f||!f.object_key.startsWith(`chats/${chatId}/`))return bad('File tidak ditemukan.',404);
    const existing=await env.DB.prepare('SELECT message_id FROM tc_media_links WHERE media_id=?').bind(mediaId).first();
    if(existing)return bad('Media sudah dikirim.',409);
-   const label=f.mime_type.startsWith('image/')?'📷 Foto':f.mime_type.startsWith('video/')?'🎬 Video':'📎 Dokumen';
+   const label=f.mime_type.startsWith('image/')?'📷 Foto':f.mime_type.startsWith('video/')?'🎬 Video':f.mime_type.startsWith('audio/')?'🎤 Pesan suara':'📎 Dokumen';
+   let replyTo;
+   try{replyTo=await validateReply(env,chatId,d.replyToId)}catch(e){return bad(e.message)}
    const msg=await env.DB.prepare('INSERT INTO tc_direct_messages(chat_id,sender_id,body) VALUES(?,?,?) RETURNING id,created_at').bind(chatId,me.id,label).first();
    await env.DB.prepare('INSERT INTO tc_media_links(message_id,media_id,chat_id) VALUES(?,?,?)').bind(msg.id,mediaId,chatId).run();
+   if(replyTo)await storeReply(env,msg.id,chatId,replyTo);
    const chat=await member(env,chatId,me.id);
    const otherId=chat.user_a===me.id?chat.user_b:chat.user_a;
-   deps.sendPush?.(otherId,{title:'TemanChat',body:label+' dari '+me.display_name,url:'/?chat='+chatId,tag:'tc-media-'+msg.id},86400);
-   return res({ok:true,message:{id:msg.id,sender_id:me.id,body:label,created_at:msg.created_at,media_id:mediaId,mime_type:f.mime_type}});
+   let unreadCount;
+   try{const r=await env.DB.prepare(`SELECT COUNT(*) AS n FROM tc_direct_messages m
+     JOIN tc_direct_chats c ON c.id=m.chat_id
+     LEFT JOIN tc_chat_receipts r ON r.chat_id=m.chat_id AND r.user_id=?
+     WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id<>? AND m.id>COALESCE(r.read_id,0)`)
+     .bind(otherId,otherId,otherId,otherId).first();unreadCount=Number(r?.n||0);
+   }catch(e){console.warn('Media unread badge pending:',e.message)}
+   deps.sendPush?.(otherId,{title:'TemanChat',body:label+' dari '+me.display_name,
+     url:'/?chat='+chatId,tag:'tc-media-'+msg.id,kind:'message',conversationId:chatId,
+     messageId:msg.id,...(unreadCount===undefined?{}:{unreadCount})},86400);
+   return res({ok:true,message:{id:msg.id,sender_id:me.id,body:label,created_at:msg.created_at,media_id:mediaId,mime_type:f.mime_type,reply_to_id:replyTo?.id||null,reply_body:replyTo?.body||null,reply_sender_id:replyTo?.sender_id||null}});
   }
   if(p==='/api/media/file'&&request.method==='GET'){
    const f=await mediaInfo(env,u.searchParams.get('messageId'),me.id);
@@ -187,13 +225,9 @@ export async function handleExtra(request, env, me, deps){
     ON CONFLICT(media_id,user_id) DO UPDATE SET downloaded_at=COALESCE(downloaded_at,CURRENT_TIMESTAMP),storage_type='google_drive',storage_verified_at=CURRENT_TIMESTAMP`).bind(f.media_id,me.id).run();
    await env.DB.prepare(`INSERT INTO tc_media_backups(media_id,user_id,storage_type,storage_ref) VALUES(?,?,'google_drive',?)
       ON CONFLICT(media_id,user_id) DO UPDATE SET storage_type='google_drive',storage_ref=excluded.storage_ref,verified_at=CURRENT_TIMESTAMP`).bind(f.media_id,me.id,fileId).run();
-   // Penghapusan dilakukan hanya sesudah salinan penerima terbukti ada di Google Drive.
-   if(f.status==='available'){
-     await env.DB.prepare("UPDATE tc_media_items SET status='deleting' WHERE id=? AND status='available'").bind(f.media_id).run();
-     await env.MEDIA.delete(f.object_key);
-     await env.DB.prepare("UPDATE tc_media_items SET status='deleted',deleted_at=CURRENT_TIMESTAMP WHERE id=?").bind(f.media_id).run();
-   }
-   return res({ok:true,deletedFromR2:true});
+   // Jangan menghapus file bersama segera: pemilik/anggota lain mungkin belum menyimpan.
+   // Pembersihan transit dilakukan oleh cron pada masa kedaluwarsa.
+   return res({ok:true,deletedFromR2:false,backupVerified:true});
   }
   return bad('Endpoint media tidak tersedia.',404);
  }
@@ -303,7 +337,14 @@ export async function cleanup(env){
  await env.DB.prepare("DELETE FROM tc_call_signals WHERE created_at<datetime('now','-2 days')").run();
  await env.DB.prepare("UPDATE tc_call_sessions SET status='missed' WHERE status='ringing' AND created_at<datetime('now','-90 seconds')").run();
  if(!env.MEDIA)return;
- const expired=await env.DB.prepare("SELECT id,object_key FROM tc_media_items WHERE status IN ('pending','available','deleting') AND expires_at<datetime('now') LIMIT 15").all();
+ const expired=await env.DB.prepare(`SELECT f.id,f.object_key FROM tc_media_items f
+   LEFT JOIN tc_media_links l ON l.media_id=f.id
+   LEFT JOIN tc_direct_chats c ON c.id=l.chat_id
+   LEFT JOIN tc_media_preferences p ON p.user_id=CASE WHEN c.user_a=f.uploader_id THEN c.user_b ELSE c.user_a END
+   WHERE f.status IN ('pending','available','deleting') AND f.expires_at<datetime('now')
+   AND (f.status='pending' OR p.save_mode IS NULL OR p.save_mode IN ('none','local')
+     OR EXISTS(SELECT 1 FROM tc_media_backups b WHERE b.media_id=f.id AND b.user_id=p.user_id))
+   LIMIT 15`).all();
  for(const f of expired.results){
   try{await env.MEDIA.delete(f.object_key);await env.DB.prepare("UPDATE tc_media_items SET status='expired',deleted_at=CURRENT_TIMESTAMP WHERE id=?").bind(f.id).run()}
   catch(e){console.error('R2 cleanup error',f.id,e?.message)}

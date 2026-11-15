@@ -9,11 +9,11 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/style.css?v=7.3.0">
-  <link rel="stylesheet" href="/v6.css?v=7.3.0">
-  <script src="/config.js?v=7.3.0" defer></script>
-  <script src="/storage.js?v=7.3.0" defer></script>
-  <script src="/app.js?v=7.3.0" defer></script>
+  <link rel="stylesheet" href="/style.css?v=7.4.0">
+  <link rel="stylesheet" href="/v6.css?v=7.4.0">
+  <script src="/config.js?v=7.4.0" defer></script>
+  <script src="/storage.js?v=7.4.0" defer></script>
+  <script src="/app.js?v=7.4.0" defer></script>
 </head>
 <body>
 <div id="app">
@@ -49,14 +49,34 @@
       <span class="tc-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
       <span id="typingLabel">Sedang mengetik…</span>
     </div>
+    <div id="replyPreview" class="tc-reply-preview" hidden>
+      <span class="tc-reply-preview-label">Membalas</span><span id="replyPreviewText"></span>
+      <button type="button" id="replyCancel" aria-label="Batalkan balasan">×</button>
+    </div>
+    <div id="voicePanel" class="tc-voice-panel" hidden>
+      <span id="voiceStatus">🎙️ Merekam…</span><strong id="voiceTime">00:00</strong>
+      <span class="tc-voice-hint" id="voiceHint">↑ Geser ke atas untuk kunci · ← batal</span>
+      <button type="button" id="voicePause" hidden>Jeda</button>
+      <button type="button" id="voiceCancel">Batal</button>
+      <button type="button" id="voiceSend" hidden>Kirim</button>
+    </div>
     <form class="compose" id="messageForm">
       <button type="button" class="round" id="attachBtn" title="Kirim foto/video/file dari perangkat" aria-label="Lampiran"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       <input id="attachmentInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,application/pdf" hidden>
       <input id="messageInput" maxlength="1000" placeholder="Tulis pesan…" autocomplete="off" disabled>
+      <button class="round tc-mic-button" id="voiceMessageBtn" type="button" title="Tahan untuk merekam, geser ke atas untuk mengunci" aria-label="Rekam pesan suara">🎙</button>
       <button class="send" type="submit" aria-label="Kirim pesan" disabled><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button>
     </form>
   </main>
 </div>
+<dialog id="mediaNoticeDialog" class="tc-media-notice">
+ <h2>Foto pertama diterima 📷</h2>
+ <p>Secara bawaan, foto dan video tidak disimpan otomatis. File transit tersedia sekitar 3 hari. Simpan media tertentu lewat menu ⋯, atau atur lokasi penyimpanan di Pengaturan.</p>
+ <div class="tc-notice-buttons">
+  <button type="button" id="mediaNoticeUnderstand">Mengerti</button>
+  <button type="button" id="mediaNoticeSettings">Pengaturan</button>
+ </div>
+</dialog>
 <aside id="installBanner" class="tc-install-banner" aria-label="Pasang aplikasi TemanChat" hidden>
   <div class="tc-install-banner-icon" aria-hidden="true">✦</div>
   <div class="tc-install-banner-copy">
