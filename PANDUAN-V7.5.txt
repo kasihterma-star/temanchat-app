@@ -1,0 +1,23 @@
+TemanChat V7.5 FULL — Smart Notification + Swipe Balas + Rekaman Glass
+
+1. Ekstrak semua file paket ini.
+2. Salin isi folder ke Documents\GitHub\temanchat-app (replace file lama).
+3. GitHub Desktop: Commit to main -> Push origin.
+4. Cloudflare: pastikan deployment Ready, binding DB dan MEDIA tetap ada.
+5. Buka PWA dari ikon, refresh, dan uji dua akun.
+
+Notifikasi ON:
+- Saat chat dengan orang A sedang aktif dan terlihat: tidak berbunyi untuk pesan A.
+- Pesan dari B tetap berbunyi.
+- Kalau keluar dari chat, pindah aplikasi atau kunci layar: notifikasi A aktif lagi.
+- Panggilan masuk tetap berdering ketika notifikasi ON.
+
+Notifikasi OFF lewat Pengaturan:
+- Berhenti menerima push dan bunyi panggilan di perangkat tersebut.
+- Chat, riwayat panggilan, dan angka belum dibaca dalam aplikasi tetap ada.
+- Kembalikan ON untuk mengaktifkan lagi. Berlaku per perangkat.
+
+Swipe Balas: geser bubble ke kanan sekitar 62 piksel. Di PC: tombol ⋯ -> Balas.
+Pesan suara: panel gelombang, timer, kunci geser atas, jeda, kirim, batal; pemutar suara punya kecepatan 1x / 1.5x / 2x.
+
+Tabel fokus dibuat otomatis di D1; VAPID & R2 tidak perlu dibuat ulang.

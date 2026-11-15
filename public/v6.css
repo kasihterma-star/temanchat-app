@@ -411,3 +411,56 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
  .compose{gap:5px}
  .compose .round#attachBtn{width:34px;flex-basis:34px}
 }
+
+/* V7.5 Smart Chat — only UI polish; preserve Glass Monokrom */
+.bubble{--tc-swipe-x:0px;transform:translate3d(var(--tc-swipe-x),0,0);transition:transform .19s cubic-bezier(.18,.75,.3,1);touch-action:pan-y;will-change:transform}
+.bubble.tc-swiping{transition:none;user-select:none;-webkit-user-select:none}
+.tc-swipe-reply-icon{position:absolute;left:-34px;top:45%;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;
+ color:var(--accent);background:var(--head);border:1px solid var(--line);opacity:0;transform:scale(.7);pointer-events:none;box-shadow:var(--bubble-shadow);
+ transition:opacity .14s,transform .14s;font-size:22px;font-weight:650}
+.bubble.tc-swiping .tc-swipe-reply-icon{opacity:.8;transform:scale(1)}
+.bubble.tc-reply-ready .tc-swipe-reply-icon{opacity:1;transform:scale(1.08)}
+.tc-voice-panel:not([hidden]){display:flex;flex-direction:column;align-items:stretch;gap:11px;
+ border:1px solid var(--line);background:var(--head);border-radius:18px;padding:14px 15px;
+ box-shadow:var(--shadow);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+.tc-voice-top{display:flex;align-items:center;gap:9px;min-width:0}
+.tc-record-dot{width:10px;height:10px;border-radius:50%;background:#cc525d;box-shadow:0 0 0 5px rgba(204,82,93,.12);animation:tc-record-pulse 1.45s ease-in-out infinite}
+#voiceStatus{font-size:13px;font-weight:750;flex:1;color:var(--strong)}
+#voiceTime{font-size:17px;font-weight:800;letter-spacing:.5px;color:var(--strong);font-variant-numeric:tabular-nums}
+.tc-voice-wave{height:30px;display:flex;align-items:center;justify-content:space-around;gap:3px;overflow:hidden;padding:1px 0}
+.tc-voice-wave i{width:3px;height:var(--wave-height,16px);border-radius:6px;background:var(--accent);opacity:.75;
+ transform-origin:center;animation:tc-voice-wave 1s ease-in-out infinite alternate}
+.tc-voice-wave i:nth-child(4n+1){--wave-height:10px;animation-delay:-.44s}
+.tc-voice-wave i:nth-child(4n+2){--wave-height:24px;animation-delay:-.72s}
+.tc-voice-wave i:nth-child(4n+3){--wave-height:17px;animation-delay:-.2s}
+.tc-voice-wave i:nth-child(4n+4){--wave-height:28px;animation-delay:-.9s}
+.tc-voice-paused .tc-voice-wave i,.tc-voice-paused .tc-record-dot{animation-play-state:paused;opacity:.35}
+.tc-voice-hint{display:block;flex:none;white-space:normal;font-size:11px;color:var(--muted);text-align:center;line-height:1.3}
+.tc-voice-hint[hidden]{display:none!important}
+.tc-voice-controls{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.tc-voice-controls button{border-radius:12px;border:1px solid var(--line);min-height:38px;padding:9px 16px;font-size:12px;font-weight:750;
+ background:var(--control);color:var(--strong);cursor:pointer}
+.tc-voice-controls #voiceCancel{margin-right:auto;color:#d26870}
+.tc-voice-controls #voiceSend{border:0;color:#fff;background:var(--accent)}
+.tc-voice-controls button[hidden]{display:none!important}
+.tc-voice-locked .tc-record-dot{background:var(--accent);box-shadow:0 0 0 5px rgba(43,141,114,.13)}
+.tc-mic-button{display:grid!important;place-items:center;touch-action:none}
+.tc-mic-button .tc-icon{width:19px;height:19px}
+.tc-audio-shell{background:var(--control);border:1px solid var(--line-soft);padding:9px 10px;border-radius:14px;max-width:100%;min-width:0}
+.tc-audio-title{display:flex;align-items:center;gap:8px;font-weight:750;font-size:12px;color:var(--strong);margin-bottom:7px}
+.tc-audio-icon{width:25px;height:25px;background:var(--accent);color:#fff;border-radius:10px;display:grid;place-items:center;font-size:17px}
+.tc-audio-shell audio{width:min(270px,100%);max-width:100%;height:40px;display:block}
+@keyframes tc-voice-wave{from{transform:scaleY(.37)}to{transform:scaleY(1)}}
+@keyframes tc-record-pulse{50%{box-shadow:0 0 0 8px rgba(204,82,93,.05)}}
+@media (max-width:740px){
+ .tc-voice-panel:not([hidden]){padding:12px 11px;gap:10px;margin:0 7px}
+ .tc-voice-hint{order:initial;flex-basis:auto}
+ .tc-voice-controls button{min-height:42px;padding:10px 13px}
+ .tc-swipe-reply-icon{left:-27px}
+}
+@media (prefers-reduced-motion:reduce){.tc-voice-wave i,.tc-record-dot{animation:none!important}.bubble{transition:none!important}}
+
+.tc-audio-controls{display:flex;align-items:center;gap:6px;min-width:0}
+.tc-audio-controls audio{flex:1;min-width:0;width:min(100%,255px)}
+.tc-audio-speed{border:1px solid var(--line);background:var(--head);color:var(--strong);border-radius:10px;
+ font-size:11px;font-weight:800;flex:0 0 39px;padding:8px 4px;cursor:pointer}

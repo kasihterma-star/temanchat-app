@@ -1,40 +1,36 @@
-# TemanChat V7.4 — Reply, Pesan Suara & Penyimpanan Media
+# TemanChat V7.5 FULL — Smart Notification, Swipe Reply, Voice Glass
 
-**Paket proyek lengkap**, melanjutkan V7.3. Desain Glass Monokrom, autentikasi, percakapan, centang, Web Push, panggilan, status Online/Offline, Sedang Mengetik, dan pengingat instal tetap disertakan.
+Paket lengkap penerus TemanChat V7.4. Desain **Glass Monokrom** dan seluruh fitur lama (akun, status online, R2, Web Push, centang, media, panggilan, foto profil, dan rekam suara) dipertahankan.
 
-## Yang aktif pada V7.4
+## Pembaruan yang diterapkan
 
-- **Balas pesan:** geser gelembung pesan ke kanan di HP, atau klik **⋯ → Balas pesan** di desktop. Rujukan pesan asli disimpan ke tabel baru `tc_reply_links` di Cloudflare D1 (dibuat otomatis). Bisa membalas teks maupun pesan media.
-- **Pesan suara:** tekan dan tahan tombol 🎙 pada HP. Lepas untuk mengirim, geser ke atas untuk mengunci, geser ke kiri untuk membatalkan. Setelah terkunci tersedia Jeda/Lanjut, Batal, Kirim. Pada desktop, klik mikrofon untuk mulai merekam dan gunakan tombol Kirim/Batal pada panel. Rekaman diunggah ke R2 privat, maksimal 25 MB / 3 menit, lalu dapat diputar di percakapan.
-- **Pemberitahuan foto pertama:** tampil hanya ketika akun pertama kali melihat foto yang diterima di percakapan. Dua tombol: **Mengerti** dan **Pengaturan**. Pilihan tercatat per akun di tabel `tc_media_preferences` (dibuat otomatis).
-- **Media:** pilihan menyimpan file ada di menu **⋯** pada pesan; default akun **Tidak simpan otomatis**. Pilihan simpan manual ke perangkat tetap tersedia.
-- **Folder lokal:** Chrome/Edge desktop atau browser lain yang mendukung `showDirectoryPicker` dapat memilih folder penyimpanan. Pilihan lokal di browser tanpa izin folder menyimpan salinan permanen dalam penyimpanan aplikasi (IndexedDB), **bukan otomatis ke galeri**.
-- **Pengaturan → Panduan Penyimpanan & Media** tersedia kapan saja.
-- **R2:** untuk media baru, masa transit awal ditetapkan sekitar **3 hari** (cron menghapus setelah melewati masa tersebut). Jika akun penerima sudah memilih mode backup cloud, pembersihan ditahan sampai bukti backup tersedia; pantau kapasitas R2 untuk file tertunda. Media lama dari versi terdahulu tetap menggunakan waktu kedaluwarsa yang tersimpan sebelumnya.
+1. **Notifikasi pintar per percakapan.** Saat notifikasi ON dan TemanChat aktif menampilkan chat dengan A, pesan baru A **tidak memicu push** atau suara tambahan. Chat B tetap memberi notifikasi. Setelah meninggalkan chat A, meminimalkan aplikasi, mematikan layar, berpindah tab/aplikasi, atau mengunci HP, notifikasi A kembali aktif. Panggilan masuk tidak dibisukan oleh fitur ini.
+2. **Notifikasi OFF dari Pengaturan.** Mematikan semua notifikasi membatalkan langganan Web Push di perangkat tersebut dan menghentikan bunyi panggilan serta notifikasi lokal. Notifikasi OFF **tidak mematikan chat, panggilan, atau angka belum dibaca di dalam aplikasi**. UI panggilan masuk saat TemanChat terbuka tetap bisa ditampilkan tanpa suara. Pilihan OFF tersimpan di perangkat dan ON bisa mengaktifkan kembali dengan izin notifikasi perangkat. Preferensi OFF **berlaku per instalasi/perangkat**, bukan semua perangkat pengguna sekaligus.
+3. **Balas dengan geser.** Pada layar sentuh, geser bubble ke kanan sekitar **62 px**. Bubble mengikuti jari dan menampilkan tanda ↩ Balas. Geser ke atas/bawah tetap dipakai untuk menggulir chat. Di komputer tetap tersedia menu **⋯ → Balas pesan**. Kutipan balasan tetap tersimpan di D1 sebagaimana V7.4.
+4. **Perekam pesan suara lebih modern.** Panel kaca dengan timer, garis gelombang animasi (dekoratif), petunjuk geser, tombol Batal/Jeda/Kirim; tombol mikrofon diganti ikon SVG yang konsisten. Setelah pesan suara dibuka, pemutar memiliki kecepatan **1× / 1,5× / 2×** dan kontrol audio bawaan perangkat. Fungsi tahan-lepas, geser atas untuk mengunci, geser kiri untuk batal tetap tersedia.
+5. **Cache PWA baru** `temanchat-v75-smart-voice` dan aset `7.5.0` supaya browser memuat kode baru.
 
-## Batasan yang perlu diketahui
+## Cara pasang (GitHub Desktop)
 
-1. **Google Drive otomatis belum aktif secara universal.** File `public/config.js` belum berisi OAuth Client ID; kamu harus menyiapkan OAuth resmi agar opsi Drive bisa dipilih. Kode backup Google pada versi sebelumnya dipertahankan, tetapi tidak boleh dianggap aktif tanpa konfigurasi dan pengujian izin.
-2. **Nextcloud/CasaOS belum tersambung.** Pilihan tersebut terlihat sebagai rencana tetapi tidak dapat diaktifkan sampai konektor dibuat.
-3. **File besar lewat Google Drive pengirim belum aktif**. V7.4 tetap membatasi foto/video/dokumen lewat Worker hingga 20 MB; audio hingga 25 MB. Upload video besar memerlukan alur terpisah agar tidak melewati batas Cloudflare Workers.
-4. **PWA iPhone/Android tidak dapat dipaksa menulis file secara diam-diam ke galeri/folder**. Lokasi unduhan mengikuti izin sistem. Pilihan lokal di aplikasi saat aplikasi aktif memakai penyimpanan browser dan bisa hilang jika data situs dibersihkan.
-5. Rekaman mikrofon memerlukan izin browser; codec yang didukung berbeda antara Safari dan Chrome. Uji langsung pada iPhone/Android sebelum dipakai secara luas.
-6. Ini bukan enkripsi ujung-ke-ujung (E2EE) untuk isi chat dan media. R2 tetap **private** dan berkas disajikan hanya lewat endpoint yang memeriksa keanggotaan percakapan.
+1. Ekstrak ZIP ini.
+2. Salin **semua isinya** (bukan folder terluar) ke `Documents/GitHub/temanchat-app`.
+3. Saat diminta, pilih **Replace the files in the destination**. Jangan menghapus folder `.git` yang sudah ada pada repository lokal.
+4. Periksa perubahan di GitHub Desktop. Commit dengan judul `TemanChat V7.5 Smart Notification Swipe Voice` lalu klik **Push origin**.
+5. Tunggu deployment `temanchat-app` di Cloudflare **Ready**, lalu refresh paksa desktop (`Ctrl+Shift+R`) atau tutup lalu buka ulang PWA di HP.
 
-## Pasang dari GitHub Desktop
+Tidak perlu mengubah kunci VAPID, bucket R2, binding `MEDIA`, ataupun membuat tabel D1 manual. Tabel `tc_push_focus` disiapkan otomatis oleh Worker.
 
-1. Ekstrak ZIP dan salin **semua isi root** paket ke `Documents/GitHub/temanchat-app`.
-2. Pilih **Replace files in the destination**, jangan menyalin folder ZIP sebagai subfolder.
-3. Di GitHub Desktop: **Commit to main → Push origin**.
-4. Di Cloudflare pastikan worker `temanchat-app` status **Ready** dan binding D1 `DB` + R2 `MEDIA` tersedia.
-5. Refresh aplikasi dengan paksa di desktop; di iPhone tutup lalu buka ulang PWA dari Layar Utama.
+## Uji pada dua perangkat
 
-Tidak perlu mengulang VAPID, akun login, atau menjalankan SQL manual. Tabel baru dibuat oleh backend secara otomatis.
+- **Notifikasi ON:** buka chat A pada HP penerima, kirim pesan A dari perangkat lain. Saat chat A terlihat/fokus, tidak ada suara/push. Kirim pesan dari B → notifikasi tetap muncul.
+- **Layar terkunci:** kunci HP penerima, kirim lagi pesan dari A → notifikasi kembali muncul. Ada kemungkinan jeda singkat jika browser tidak segera memberitahukan status layar terkunci; status fokus kedaluwarsa sekitar 23 detik.
+- **Notifikasi OFF:** matikan lewat Pengaturan, kirim pesan dan panggilan baru → tidak ada notifikasi/bunyi pada HP tersebut; chat dan riwayat tetap berjalan. Aktifkan kembali dan uji ulang.
+- **Balas pesan:** di HP swipe bubble ke kanan; di desktop pilih ⋯ → Balas. Uji gulir vertikal agar tidak keliru membalas.
+- **Pesan suara:** tahan mic, geser ke atas untuk kunci, Kirim/Jeda/Batal; buka rekaman yang diterima, coba kecepatan 1×, 1,5×, 2×.
 
-## Pemeriksaan dilakukan
+## Catatan teknis
 
-- `npm run check` lulus: sintaks JS, Web Push crypto, aturan panggilan, presence, typing, struktur UI, SQL Reply dan preferensi media.
-- Pengujian browser HTML/CSS melalui Chromium **simulasi API**: ukuran 390 px dan 1280 px, balas pesan ber-ID yang benar, pemberitahuan pertama, dan fokus input. Tidak ada error JavaScript / overflow.
-- Simulasi MediaRecorder desktop: Batal tidak mengunggah, Kirim menghasilkan satu request pengiriman media.
-
-**Belum diuji langsung di akun Cloudflare dan HP pengguna.** Cadangkan repository/commit lama sebelum mengganti file; semua pengujian lokal tidak menggantikan pengujian produksi.
+- Agar Web Push tidak menampilkan notifikasi yang sama saat chat aktif, frontend melaporkan **ID percakapan yang sedang terlihat** ke Worker; server memverifikasi pengguna dan percakapan tersebut, lalu menahan pengiriman pesan dari chat itu selama status fokus masih segar. Konten ketikan tidak dikirim. Ketika halaman hilang fokus, status disetop; jika sinyal keluar gagal karena iOS membekukan PWA, penanda otomatis kedaluwarsa, sehingga notifikasi dapat kembali muncul setelah jeda.
+- Suara notifikasi/panggilan saat aplikasi tertutup tetap tunduk pada aturan iOS/Android dan setelan suara sistem. OFF memutus langganan aplikasi; notifikasi yang sudah antre di layanan push mungkin masih dapat muncul sesaat ketika perubahan diterapkan.
+- Pengujian lokal telah mencakup `npm run check`, pemeriksaan otorisasi endpoint fokus, simulasi browser ukuran 390 px dan 1280 px, swipe balas, tampilan perekam, serta aturan mute pesan A/pesan B/panggilan. **Belum diuji langsung di Cloudflare dan iPhone pengguna.**
+- Pengiriman file besar melalui Google Drive, backup Nextcloud otomatis, dan notifikasi panggilan bergaya native tetap memiliki batasan integrasi sebagaimana pada V7.4.

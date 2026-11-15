@@ -40,7 +40,7 @@ const readAcknowledged=new Map();
 const seenChatLast=new Map();
 function notifySupported(){return 'Notification' in window&&window.isSecureContext}
 async function notifyLocal(title,body,tag){
- if(!notifySupported()||Notification.permission!=='granted')return false;
+ if(!notificationsEnabled()||!notifySupported()||Notification.permission!=='granted')return false;
  const options={body,tag,icon:'/icons/icon-192.png',renotify:true};
  // Hindari serviceWorker.ready yang dapat menggantung sebelum worker aktif.
  try{
@@ -58,10 +58,47 @@ async function notifyLocal(title,body,tag){
 }
 
 // V6.6 Web Push: izin diminta HANYA setelah ketukan tombol di Pengaturan.
-let serverPushEnabled=false;
-const audioPreference=()=>localStorage.getItem('tc_call_sounds')!=='off';
+let serverPushEnabled=false,serverPushEndpoint='';
+const NOTIFY_PREF='tc_notifications_enabled';
+const notificationsEnabled=()=>localStorage.getItem(NOTIFY_PREF)!=='off';
+const audioPreference=()=>notificationsEnabled()&&localStorage.getItem('tc_call_sounds')!=='off';
+// Smart Notification: jangan membunyikan notifikasi hanya bila chat yang sama
+// benar-benar terlihat dan sedang menjadi layar utama pengguna.
+const visibleChatId=()=>{
+ if(!active||document.hidden||document.visibilityState!=='visible')return null;
+ if(typeof document.hasFocus==='function'&&!document.hasFocus())return null;
+ if(innerWidth<=740&&$('conversation')?.classList.contains('mobile-hidden'))return null;
+ return active.id;
+};
+let focusChatReported=null,focusLastAt=0,focusBusy=false,focusPending=false;
+async function syncNotificationFocus(force=false){
+ if(!me||!serverPushEnabled||!serverPushEndpoint||focusBusy)return;
+ const chat=visibleChatId();
+ if(!force&&focusChatReported===chat&&Date.now()-focusLastAt<9500)return;
+ focusBusy=true;
+ try{
+  await post('/api/push/active-chat',{endpoint:serverPushEndpoint,active:!!chat,conversationId:chat||null});
+  focusChatReported=chat;focusLastAt=Date.now();
+ }catch(e){console.warn('Fokus notifikasi:',e.message)}
+ finally{focusBusy=false;
+  if(focusPending){focusPending=false;void syncNotificationFocus(true)}
+ }
+}
+function updateNotificationFocus(force=false){
+ if(focusBusy){focusPending=true;return}
+ void syncNotificationFocus(force);
+}
+function leaveNotificationFocus(){
+ if(!me||!serverPushEndpoint||!serverPushEnabled)return;
+ // Request keepalive membantu saat tab tersembunyi atau layar terkunci.
+ const endpoint=serverPushEndpoint;
+ focusChatReported=null;focusLastAt=0;
+ void fetch('/api/push/active-chat',{method:'POST',credentials:'same-origin',cache:'no-store',keepalive:true,
+  headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint,active:false})}).catch(()=>{});
+}
+
 const badgeAPI=('setAppBadge' in navigator);
-async function syncAppBadge(n){try{if(!badgeAPI)return;const count=Math.max(0,Number(n)||0);if(count)await navigator.setAppBadge(count);else if(navigator.clearAppBadge)await navigator.clearAppBadge();}catch(e){console.warn('Badge system',e.message)}}
+async function syncAppBadge(n){try{if(!badgeAPI)return;const count=notificationsEnabled()?Math.max(0,Number(n)||0):0;if(count)await navigator.setAppBadge(count);else if(navigator.clearAppBadge)await navigator.clearAppBadge();}catch(e){console.warn('Badge system',e.message)}}
 
 const fromB64url=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)),c=>c.charCodeAt(0));
 async function registerPush(){
@@ -76,15 +113,17 @@ async function registerPush(){
  let sub=await reg.pushManager.getSubscription();
  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:fromB64url(cfg.publicKey)});
  await post('/api/push/subscribe',{subscription:sub.toJSON()});
- serverPushEnabled=true;
+ serverPushEnabled=true;serverPushEndpoint=sub.endpoint;
+ updateNotificationFocus(true);
  return true;
 }
 async function checkPush(){
+ if(!notificationsEnabled()){serverPushEnabled=false;return}
  try{
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||Notification.permission!=='granted')return;
   const reg=await navigator.serviceWorker.getRegistration('/');
   const sub=await reg?.pushManager.getSubscription();
-  if(sub){await post('/api/push/subscribe',{subscription:sub.toJSON()});serverPushEnabled=true;}
+  if(sub){await post('/api/push/subscribe',{subscription:sub.toJSON()});serverPushEnabled=true;serverPushEndpoint=sub.endpoint;updateNotificationFocus(true);}
  }catch(e){console.warn('Push registration refresh',e.message)}
 }
 const UUID=/^[0-9a-f-]{36}$/;
@@ -218,8 +257,8 @@ async function refreshPartnerTyping(){
  }catch(e){console.warn('Status mengetik teman:',e.message)}
  finally{typingReadBusy=false}
 }
-function showChat(){if(innerWidth<=740){$('sidebar').classList.remove('mobile-visible');$('conversation').classList.remove('mobile-hidden');}}
-function showList(){stopTyping();if(innerWidth<=740){$('sidebar').classList.add('mobile-visible');$('conversation').classList.add('mobile-hidden');}}
+function showChat(){if(innerWidth<=740){$('sidebar').classList.remove('mobile-visible');$('conversation').classList.remove('mobile-hidden');}updateNotificationFocus(true);}
+function showList(){stopTyping();if(innerWidth<=740){$('sidebar').classList.add('mobile-visible');$('conversation').classList.add('mobile-hidden');}updateNotificationFocus(true);}
 function placeholder(msg){$('messages').replaceChildren(element('div','day',msg));}
 function updateHeader(c){
  $('headName').textContent=c?c.other_name:'Pilih teman';paintAvatar($('headAvatar'),c?.other_name,c?.other_username);
@@ -285,14 +324,14 @@ async function fetchChats(){
   const d=await api('/api/chat/conversations');chats=d.conversations||[];
   // Hitung pesan yang belum dibaca dari server, bukan hanya ID pesan terakhir.
   let totalUnread=0;
-  const activeVisible=!!active&&!document.hidden&&
+  const activeVisible=!!visibleChatId()&&
     (innerWidth>740||!$('conversation').classList.contains('mobile-hidden'));
   for(const c of chats){
    const count=Math.max(0,Number(c.unread_count||0));
    totalUnread+=count;
    const previous=previousUnread.get(c.id);
    const isCurrentVisible=activeVisible&&active?.id===c.id;
-   if(notificationBaselineReady&&!serverPushEnabled&&count>(previous??0)&&!isCurrentVisible){
+   if(notificationBaselineReady&&notificationsEnabled()&&!serverPushEnabled&&count>(previous??0)&&!isCurrentVisible){
     const increase=count-(previous??0);
     // Notifikasi lokal hanya saat JavaScript masih aktif; halaman tertutup perlu Web Push.
     void notifyLocal('Pesan dari '+(c.other_name||'teman'),
@@ -368,7 +407,20 @@ async function openMedia(messageId,m,area){
   }
   const box=area.querySelector('.tc-preview');
   const old=box.querySelector('img,video,audio');if(old?.src?.startsWith('blob:'))URL.revokeObjectURL(old.src);
-  box.replaceChildren(preview);
+  if(isAudio){
+   const audioShell=element('div','tc-audio-shell');
+   const title=element('div','tc-audio-title');
+   const icon=element('span','tc-audio-icon','♫');
+   title.append(icon,element('span','','Pesan suara'));
+   const controls=element('div','tc-audio-controls');
+   const speed=element('button','tc-audio-speed','1×');speed.type='button';speed.title='Ubah kecepatan putar';
+   speed.setAttribute('aria-label','Kecepatan pemutaran suara 1 kali');
+   speed.onclick=()=>{const rates=[1,1.5,2];const next=rates[(rates.indexOf(preview.playbackRate)+1)%rates.length];
+    preview.playbackRate=next;speed.textContent=next+'×';speed.setAttribute('aria-label','Kecepatan pemutaran suara '+next+' kali')};
+   controls.append(preview,speed);audioShell.append(title,controls);
+   box.replaceChildren(audioShell);
+   const openButton=area.querySelector('.tc-media-action');if(openButton)openButton.hidden=true;
+  }else box.replaceChildren(preview);
   const actions=area.querySelector('.tc-actions');actions.replaceChildren();actions.hidden=true;
   const fileName=isAudio?'TemanChat-suara-'+messageId+'.'+(mime==='audio/mp4'?'m4a':'webm'):
    isVideo?'TemanChat-video-'+messageId+'.mp4':mime.startsWith('image/')?'TemanChat-foto-'+messageId+'.jpg':'TemanChat-file-'+messageId;
@@ -462,10 +514,37 @@ function addMessage(m){
  const reply=element('button','','↩ Balas pesan');reply.type='button';reply.onclick=()=>{beginReply(m);menu.hidden=true};
  menu.append(reply);menuButton.onclick=e=>{e.stopPropagation();menu.hidden=!menu.hidden};
  menuWrap.append(menuButton,menu);b.append(menuWrap);
- let touchX=0,touchY=0;
- b.addEventListener('touchstart',e=>{if(e.target.closest('button,a,audio,video,input'))return;touchX=e.touches[0]?.clientX||0;touchY=e.touches[0]?.clientY||0;},{passive:true});
- b.addEventListener('touchend',e=>{if(!touchX)return;const touch=e.changedTouches[0];const dx=(touch?.clientX||0)-touchX,dy=(touch?.clientY||0)-touchY;
-  if(dx>65&&Math.abs(dy)<55)beginReply(m);touchX=0;},{passive:true});
+ // Touch-only swipe. Vertikal tetap scroll; arah horizontal menampilkan indikator Balas.
+ const swipe={active:false,x:0,y:0,lastX:0,lastY:0,axis:null};
+ const resetSwipe=()=>{
+  b.style.setProperty('--tc-swipe-x','0px');b.classList.remove('tc-swiping','tc-reply-ready');
+  swipe.active=false;swipe.axis=null;
+ };
+ const swipeIcon=element('span','tc-swipe-reply-icon','↩');swipeIcon.setAttribute('aria-hidden','true');b.append(swipeIcon);
+ b.addEventListener('touchstart',e=>{
+  if(e.touches.length!==1||e.target.closest('button,a,audio,video,input,.tc-reply-quote'))return;
+  const t=e.touches[0];swipe.active=true;swipe.axis=null;
+  swipe.x=swipe.lastX=t.clientX;swipe.y=swipe.lastY=t.clientY;
+ },{passive:true});
+ b.addEventListener('touchmove',e=>{
+  if(!swipe.active||e.touches.length!==1)return;
+  const t=e.touches[0],dx=t.clientX-swipe.x,dy=t.clientY-swipe.y;
+  swipe.lastX=t.clientX;swipe.lastY=t.clientY;
+  if(!swipe.axis&&Math.max(Math.abs(dx),Math.abs(dy))>8)swipe.axis=Math.abs(dx)>Math.abs(dy)*1.25?'horizontal':'vertical';
+  if(swipe.axis!=='horizontal')return;
+  if(e.cancelable)e.preventDefault();
+  const distance=Math.max(0,Math.min(85,dx));
+  b.classList.add('tc-swiping');b.style.setProperty('--tc-swipe-x',distance+'px');
+  b.classList.toggle('tc-reply-ready',distance>=62);
+ },{passive:false});
+ b.addEventListener('touchend',e=>{
+  if(!swipe.active)return;
+  const t=e.changedTouches[0];
+  const dx=(t?.clientX??swipe.lastX)-swipe.x,dy=(t?.clientY??swipe.lastY)-swipe.y;
+  const shouldReply=swipe.axis==='horizontal'&&dx>=62&&Math.abs(dy)<Math.abs(dx)*.8;
+  resetSwipe();if(shouldReply){beginReply(m);if(navigator.vibrate)navigator.vibrate(8)}
+ },{passive:true});
+ b.addEventListener('touchcancel',resetSwipe,{passive:true});
  if(m.media_id){
   const area=element('div','tc-bubble-media');
   const view=element('button','tc-media-action',m.mime_type?.startsWith('audio/')?'▶ Putar pesan suara':'Buka media');view.onclick=()=>openMedia(m.id,m,area);
@@ -506,7 +585,7 @@ async function selectChat(c){
  if(active?.id!==c.id&&(voiceRecorder||voicePendingStart))void voiceFinish(false);
  if(active?.id!==c.id){stopTyping();partnerTyping=false;}
  clearReply();active=c;lastId=0;updateHeader(c);drawPartnerTyping();renderChats();
- placeholder('Memuat pesan…');showChat();
+ placeholder('Memuat pesan…');showChat();updateNotificationFocus(true);
  void refreshPartnerTyping();
  await fetchMessages(true);
 }
@@ -542,11 +621,13 @@ function voiceRefreshUI(){
  $('voicePanel').hidden=!voicePendingStart&&!voiceRecorder;
  const elapsed=voiceElapsed+(voiceRecorder?.state==='recording'?Date.now()-voiceStart:0);
  $('voiceTime').textContent=voiceClock(elapsed);
- $('voiceStatus').textContent=voicePendingStart?'Meminta izin mikrofon…':voiceLocked?'🔒 Rekaman terkunci':'🔴 Merekam suara…';
+ $('voiceStatus').textContent=voicePendingStart?'Meminta izin mikrofon…':voiceLocked?'Rekaman terkunci':'Merekam suara…';
+ $('voicePanel').classList.toggle('tc-voice-paused',voiceRecorder?.state==='paused');
+ $('voicePanel').classList.toggle('tc-voice-locked',!!voiceLocked);
  $('voiceHint').hidden=voiceLocked;
  $('voicePause').hidden=!voiceLocked;
  $('voiceSend').hidden=!voiceLocked;
- $('voicePause').textContent=voiceRecorder?.state==='paused'?'Lanjut':'Jeda';
+ $('voicePause').textContent=voiceRecorder?.state==='paused'?'▶ Lanjut':'⏸ Jeda';
 }
 function voiceStopTracks(){clearInterval(voiceTimer);voiceTimer=null;voiceStream?.getTracks().forEach(t=>t.stop());voiceStream=null;}
 async function beginVoiceRecording(){
@@ -781,11 +862,10 @@ $('settingsBtn').onclick=()=>{
  wrap.append(element('small','','Simpan permanen ke Nextcloud memerlukan konektor server tambahan. Tidak dianggap sudah tersimpan sebelum konektor benar-benar tersedia.'));
  const notifyButton=element('button','primary','Memeriksa notifikasi…');
  const showPushState=async()=>{
-   let enabled=false;
-   try{const reg=await navigator.serviceWorker?.getRegistration('/');const sub=await reg?.pushManager?.getSubscription();
-       enabled=!!sub&&Notification.permission==='granted'&&serverPushEnabled;
-   }catch{}
-   notifyButton.textContent=enabled?'Matikan notifikasi Web Push':'Aktifkan notifikasi Web Push';
+   // Perhatikan pengaturan pengguna, bukan hanya apakah Web Push tersedia.
+   // Bahkan jika browser tidak mendukung push, OFF wajib mematikan bunyi lokal.
+   const enabled=notificationsEnabled();
+   notifyButton.textContent=enabled?'Matikan semua notifikasi':'Aktifkan semua notifikasi';
    notifyButton.setAttribute('aria-pressed',String(enabled));
    notifyButton.dataset.enabled=enabled?'true':'false';
  };
@@ -795,19 +875,25 @@ $('settingsBtn').onclick=()=>{
     if(notifyButton.dataset.enabled==='true'){
       const reg=await navigator.serviceWorker?.getRegistration('/');const sub=await reg?.pushManager?.getSubscription();
       if(sub){await post('/api/push/unsubscribe',{endpoint:sub.endpoint});await sub.unsubscribe();}
-      serverPushEnabled=false;
-      toast('Notifikasi TemanChat dinonaktifkan pada perangkat ini.');
-    }else{await registerPush();toast('Notifikasi TemanChat diaktifkan pada perangkat ini.');}
+      try{const shown=await reg?.getNotifications?.();shown?.forEach(n=>n.close())}catch{}
+      serverPushEnabled=false;serverPushEndpoint='';focusChatReported=null;
+      localStorage.setItem(NOTIFY_PREF,'off');stopCallTone();
+      if(navigator.clearAppBadge)void navigator.clearAppBadge().catch(()=>{});
+      toast('Semua notifikasi dan bunyi panggilan TemanChat dimatikan pada perangkat ini.');
+    }else{
+      await registerPush();localStorage.setItem(NOTIFY_PREF,'on');updateNotificationFocus(true);
+      toast('Notifikasi TemanChat diaktifkan pada perangkat ini.');
+    }
   }catch(e){toast('Pengaturan notifikasi gagal: '+e.message)}
-  finally{notifyButton.disabled=false;await showPushState()}
+  finally{notifyButton.disabled=false;await showPushState();toneButton.textContent=audioPreference()?'Suara panggilan: Aktif':'Suara panggilan: Nonaktif'}
  };
- wrap.append(notifyButton,element('small','','ON/OFF berlaku untuk perangkat ini. Izin sistem tidak dapat dicabut lewat aplikasi; OFF membatalkan langganan push server.'));
+ wrap.append(notifyButton,element('small','','OFF mematikan pesan, panggilan dan bunyi pada perangkat ini. Angka pesan belum dibaca di dalam chat tetap terlihat. ON mengaktifkan kembali Web Push.'));
  void (async()=>{await checkPush();await showPushState()})();
  const toneButton=element('button','primary',audioPreference()?'Suara panggilan: Aktif':'Suara panggilan: Nonaktif');
- toneButton.onclick=()=>{const enabled=!audioPreference();localStorage.setItem('tc_call_sounds',enabled?'on':'off');toneButton.textContent='Suara panggilan: '+(enabled?'Aktif':'Nonaktif');if(!enabled)stopCallTone();};
+ toneButton.onclick=()=>{if(!notificationsEnabled())return toast('Notifikasi OFF. Aktifkan terlebih dahulu agar suara panggilan bisa dipakai.');const enabled=!audioPreference();localStorage.setItem('tc_call_sounds',enabled?'on':'off');toneButton.textContent='Suara panggilan: '+(enabled?'Aktif':'Nonaktif');if(!enabled)stopCallTone();};
  wrap.append(toneButton);
  const pushTest=element('button','primary','Kirim notifikasi uji');
- pushTest.onclick=async()=>{try{const d=await post('/api/push/test',{});toast(d.sent?'Tes terkirim. Cek notifikasi perangkat.':'Push ditolak penyedia. Periksa Log Cloudflare.')}catch(e){toast(e.message)}};
+ pushTest.onclick=async()=>{if(!notificationsEnabled())return toast('Aktifkan notifikasi dahulu.');try{const d=await post('/api/push/test',{});toast(d.sent?'Tes terkirim. Cek notifikasi perangkat.':'Push ditolak penyedia. Periksa Log Cloudflare.')}catch(e){toast(e.message)}};
  wrap.append(pushTest);
  if(!runningAsApp()){const install=element('button','primary','Instal TemanChat');install.onclick=()=>{$('modal').close();void triggerTemanChatInstall()};wrap.append(install);}
  const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{
@@ -1026,7 +1112,7 @@ $('acceptCall').onclick=async()=>{
 };
 async function checkIncoming(){
  if(checkingCalls||currentCall||document.hidden||!me)return;checkingCalls=true;
- try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true,d.call.caller_username);(!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
+ try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true,d.call.caller_username);(notificationsEnabled()&&!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
  catch(e){console.warn('Incoming call',e.message)}finally{checkingCalls=false}
 }
 let lastKnownCallId=null,callHistoryReady=false,lastHistoryCheck=0;
@@ -1037,14 +1123,14 @@ async function checkMissedCalls(){
     const incoming=(d.calls||[]).filter(c=>c.direction==='incoming'&&c.status==='missed');
     if(callHistoryReady&&incoming.length&&incoming[0].id!==lastKnownCallId){
       const newest=incoming[0];
-      if(!serverPushEnabled)notifyLocal('Panggilan tak terjawab',`${newest.other_name||'Teman'} menelepon Anda`,'missed-'+newest.id);
+      if(notificationsEnabled()&&!serverPushEnabled)notifyLocal('Panggilan tak terjawab',`${newest.other_name||'Teman'} menelepon Anda`,'missed-'+newest.id);
     }
     lastKnownCallId=incoming[0]?.id||null;callHistoryReady=true;
   }catch(e){console.warn('Call history polling',e.message)}
 }
 async function tick(){
  if(!me)return;
- if(!document.hidden)void heartbeatPresence();
+ if(!document.hidden){void heartbeatPresence();updateNotificationFocus();}
  if(Date.now()-lastHistoryCheck>20000){lastHistoryCheck=Date.now();await checkMissedCalls();}
  if(document.hidden){if(Date.now()-lastListUpdate>8000){lastListUpdate=Date.now();await fetchChats();}return;}
  if(currentCall)await pollCall();else await checkIncoming();
@@ -1058,7 +1144,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.4'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.5'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
@@ -1079,9 +1165,12 @@ async function init(){
  }catch(e){console.error('TemanChat init:',e);if(e.message!=='Sesi berakhir')toast('Tidak bisa memuat akun. Periksa koneksi lalu muat ulang.');}
 }
 document.addEventListener('visibilitychange',()=>{
- if(document.hidden){stopTyping();partnerTyping=false;drawPartnerTyping();}
- else{void heartbeatPresence(true);void fetchChats();if(active){void fetchMessages(true);void refreshPartnerTyping();}}
+ if(document.hidden){leaveNotificationFocus();stopTyping();partnerTyping=false;drawPartnerTyping();}
+ else{updateNotificationFocus(true);void heartbeatPresence(true);void fetchChats();if(active){void fetchMessages(true);void refreshPartnerTyping();}}
 });
+window.addEventListener('blur',leaveNotificationFocus);
+window.addEventListener('focus',()=>updateNotificationFocus(true));
+window.addEventListener('pagehide',leaveNotificationFocus);
 window.addEventListener('focus',()=>{if(Date.now()-lastPresenceBeat>PRESENCE_PING_MS)void heartbeatPresence()});
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(console.warn));
 // Mode tema dapat langsung diubah tanpa masuk ke Pengaturan.
