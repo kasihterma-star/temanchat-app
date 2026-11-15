@@ -1,0 +1,13 @@
+TemanChat V7.3 — Pengingat instal PWA
+
+Apa yang berubah:
+- Pengingat instal muncul di halaman chat jika dibuka dari tab browser dan pengguna sudah login.
+- Jika PWA berjalan dari ikon aplikasi di Layar Utama, pengingat dan tombol instal disembunyikan.
+- Android/Chrome/Edge: membuka dialog instal browser jika beforeinstallprompt tersedia.
+- iOS Safari: menampilkan petunjuk Bagikan → Tambahkan ke Layar Utama.
+- Tombol × menunda pengingat selama 7 hari pada browser itu.
+- Setelah dialog instal diterima, pengingat disembunyikan.
+
+Catatan teknis: Browser biasa tidak selalu dapat mengetahui PWA sudah terpasang apabila situs dibuka kembali dari tab biasa. Pendeteksian paling akurat adalah ketika aplikasi berjalan dalam mode standalone. Fitur ini tidak mengubah push, chat, panggilan, atau database.
+
+Pemasangan: salin seluruh isi folder hasil ekstrak ke repository yang sama, Replace, GitHub Desktop Commit dan Push. Periksa deployment Cloudflare Ready. Tidak perlu SQL/secrets baru.

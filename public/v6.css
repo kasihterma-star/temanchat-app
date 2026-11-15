@@ -292,3 +292,60 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 /* Panggilan awal: ikon masih dapat ditekan untuk menampilkan alasan kenapa terkunci. */
 .head-actions .tc-call-locked { opacity: .62; }
 .head-actions .tc-call-locked:hover, .head-actions .tc-call-locked:focus-visible { opacity: 1; }
+
+/* V7.1: Online / Terakhir aktif — hanya satu warna status, selaras Glass Monokrom. */
+.tc-avatar-with-presence{position:relative;overflow:visible!important}
+.tc-presence-dot{display:block;position:absolute;right:-2px;bottom:-2px;
+ width:11px;height:11px;min-width:11px;border-radius:50%;border:2px solid var(--head);
+ background:var(--muted);box-shadow:0 0 0 1px var(--line-soft);pointer-events:none}
+.tc-presence-dot.online{background:#35bc77;box-shadow:0 0 0 1px rgba(53,188,119,.17)}
+.tc-contact-status{font-size:11px;line-height:1.4;margin-top:4px;color:var(--muted);
+ overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tc-status-online{color:#2aab69!important;font-weight:700}
+[data-theme="dark"] .tc-status-online{color:#63d69a!important}
+.contact .tc-contact-status{font-size:11px}
+#headStatus{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:740px){.tc-contact-status{font-size:11px}}
+
+/* V7.2 — sedang mengetik, glass minimalis (terang / gelap) */
+.tc-status-typing{color:#2a9f78!important;font-weight:750}
+[data-theme="dark"] .tc-status-typing{color:#8be5c4!important}
+.tc-typing-indicator[hidden]{display:none!important}
+.tc-typing-indicator{display:flex;align-items:center;gap:9px;
+ padding:7px 16px 7px 19px;flex-shrink:0;min-height:37px;
+ color:var(--muted);font-size:12px;font-weight:650;
+ background:var(--glass);border-top:1px solid var(--line-soft)}
+.tc-typing-dots{display:inline-flex;align-items:center;gap:3px;height:12px}
+.tc-typing-dots i{display:block;width:5px;height:5px;border-radius:50%;
+ background:currentColor;opacity:.45;animation:tc-typing-bounce 1.15s infinite ease-in-out}
+.tc-typing-dots i:nth-child(2){animation-delay:.14s}
+.tc-typing-dots i:nth-child(3){animation-delay:.28s}
+@keyframes tc-typing-bounce{0%,65%,100%{transform:translateY(0);opacity:.35}35%{transform:translateY(-3px);opacity:1}}
+@media(prefers-reduced-motion:reduce){.tc-typing-dots i{animation:none;opacity:.8}}
+@media(max-width:740px){.tc-typing-indicator{padding-inline:13px;font-size:12px}}
+
+
+/* V7.3: pengingat instal PWA, glass monokrom, non-intrusif */
+.tc-install-banner[hidden]{display:none!important}
+.tc-install-banner{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));
+ transform:translateX(-50%);z-index:50;display:flex;align-items:center;gap:12px;
+ width:min(520px,calc(100vw - 28px));padding:12px 13px;border-radius:20px;
+ background:var(--glass,rgba(255,255,255,.9));border:1px solid var(--line,rgba(128,128,128,.25));
+ color:var(--text,#222);box-shadow:0 16px 48px rgba(0,0,0,.24);
+ -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px)}
+.tc-install-banner-icon{display:grid;place-items:center;flex:0 0 39px;height:39px;
+ background:var(--control,rgba(120,120,120,.12));border:1px solid var(--line-soft,rgba(128,128,128,.2));
+ border-radius:14px;font-size:25px;color:var(--strong,var(--text))}
+.tc-install-banner-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.tc-install-banner-copy strong{font-size:13px;color:var(--strong,var(--text))}
+.tc-install-banner-copy span{font-size:11px;line-height:1.35;color:var(--muted,#777)}
+.tc-install-banner-cta,.tc-install-banner-close{font-family:inherit;cursor:pointer;font-weight:750}
+.tc-install-banner-cta{border:0;border-radius:12px;padding:11px 14px;background:#216a57;
+ color:#fff;font-size:12px}
+.tc-install-banner-close{border:1px solid var(--line-soft,rgba(128,128,128,.2));border-radius:50%;
+ width:28px;height:28px;flex:0 0 28px;background:var(--control,transparent);color:var(--muted,#777);font-size:18px}
+.tc-install-banner button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+@media(max-width:740px){.tc-install-banner{bottom:calc(12px + env(safe-area-inset-bottom));gap:9px;padding:11px}
+ .tc-install-banner-icon{flex-basis:35px;height:35px;font-size:22px}
+ .tc-install-banner-copy span{font-size:10px}
+ .tc-install-banner-cta{padding:10px}}

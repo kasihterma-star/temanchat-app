@@ -9,11 +9,11 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/style.css?v=7.0.1">
-  <link rel="stylesheet" href="/v6.css?v=7.0.1">
-  <script src="/config.js?v=7.0.1" defer></script>
-  <script src="/storage.js?v=7.0.1" defer></script>
-  <script src="/app.js?v=7.0.1" defer></script>
+  <link rel="stylesheet" href="/style.css?v=7.3.0">
+  <link rel="stylesheet" href="/v6.css?v=7.3.0">
+  <script src="/config.js?v=7.3.0" defer></script>
+  <script src="/storage.js?v=7.3.0" defer></script>
+  <script src="/app.js?v=7.3.0" defer></script>
 </head>
 <body>
 <div id="app">
@@ -45,6 +45,10 @@
       </div>
     </header>
     <section id="messages" class="messages" aria-label="Percakapan"><div class="day">Pilih teman untuk mulai</div></section>
+    <div id="typingIndicator" class="tc-typing-indicator" role="status" aria-live="polite" hidden>
+      <span class="tc-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span id="typingLabel">Sedang mengetik…</span>
+    </div>
     <form class="compose" id="messageForm">
       <button type="button" class="round" id="attachBtn" title="Kirim foto/video/file dari perangkat" aria-label="Lampiran"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       <input id="attachmentInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,application/pdf" hidden>
@@ -53,6 +57,15 @@
     </form>
   </main>
 </div>
+<aside id="installBanner" class="tc-install-banner" aria-label="Pasang aplikasi TemanChat" hidden>
+  <div class="tc-install-banner-icon" aria-hidden="true">✦</div>
+  <div class="tc-install-banner-copy">
+    <strong>Pasang TemanChat</strong>
+    <span>Lebih mudah dibuka dari Layar Utama, tanpa mencari tab browser.</span>
+  </div>
+  <button type="button" class="tc-install-banner-cta" id="installBannerAction">Instal</button>
+  <button type="button" class="tc-install-banner-close" id="installBannerDismiss" aria-label="Ingatkan nanti" title="Ingatkan nanti">×</button>
+</aside>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <dialog id="modal"><div class="modal-head"><div class="logo-large">✦</div><button class="round" id="closeModal" aria-label="Tutup"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><h2 id="modalTitle">TemanChat</h2><p id="modalDesc"></p><div id="modalContent"></div></dialog>
 <dialog id="callDialog" class="call-dialog">

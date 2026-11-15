@@ -114,6 +114,33 @@ async function deliveredWhileOnline(env,userId,chatId=null){
       delivered_id=MAX(tc_chat_receipts.delivered_id,excluded.delivered_id),
       updated_at=CURRENT_TIMESTAMP`).bind(...values).run();
 }
+// Status Online / Terakhir aktif hanya diperbarui dari halaman aplikasi yang terlihat.
+// Satu baris per akun: login di banyak perangkat tidak saling menimpa status offline.
+// 45 detik per heartbeat, offline jika tidak ada heartbeat selama 110 detik.
+const PRESENCE_OFFLINE_SECONDS=110;
+let presenceSchemaPromise;
+function ensurePresenceSchema(env){
+ if(!presenceSchemaPromise)presenceSchemaPromise=env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_user_presence (
+   user_id TEXT PRIMARY KEY,
+   last_active_at INTEGER NOT NULL,
+   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+ )`).run().catch(e=>{presenceSchemaPromise=null;throw e});
+ return presenceSchemaPromise;
+}
+// Indikator sedang mengetik bersifat sementara dan hanya terlihat oleh anggota chat.
+// Tidak menyimpan isi ketikan. Kunci satu baris per pengguna dan percakapan.
+let typingSchemaPromise;
+function ensureTypingSchema(env){
+ if(!typingSchemaPromise)typingSchemaPromise=env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_chat_typing (
+   chat_id TEXT NOT NULL,
+   user_id TEXT NOT NULL,
+   expires_at INTEGER NOT NULL,
+   PRIMARY KEY(chat_id,user_id),
+   FOREIGN KEY (chat_id) REFERENCES tc_direct_chats(id) ON DELETE CASCADE,
+   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+ )`).run().catch(e=>{typingSchemaPromise=null;throw e});
+ return typingSchemaPromise;
+}
 const EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 async function consumeToken(env,raw,purpose){
   if(typeof raw!=='string'||!/^[0-9a-f]{64}$/.test(raw))return null;
@@ -146,7 +173,7 @@ export default {
       }
       return reply({ok:Object.values(checks).every(c=>c.ready),checks});
     }
-    if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.0.1',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:false});
+    if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.1.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:false});
     if(path==='/api/auth/config'&&request.method==='GET')return reply({siteKey:SITE_KEY,authReady:Boolean(env.DB&&env.RESEND_API_KEY&&env.TURNSTILE_SECRET_KEY)});
     if(path==='/api/auth/me'&&request.method==='GET'){
       const u=await userSession(request,env);return u?reply({ok:true,user:publicUser(u)}):reply({ok:false},401);
@@ -343,15 +370,66 @@ export default {
       const me=await userSession(request,env);
       return await pushApi(request,env,me);
     }
+    if(path==='/api/presence/heartbeat'&&request.method==='POST'){
+      const me=await userSession(request,env);
+      if(!me)return reply({error:'Silakan masuk kembali.'},401);
+      if(!allowOrigin(request))return reply({error:'Origin tidak diizinkan.'},403);
+      await ensurePresenceSchema(env);
+      await env.DB.prepare(`INSERT INTO tc_user_presence(user_id,last_active_at)
+        VALUES(?,CAST(strftime('%s','now') AS INTEGER))
+        ON CONFLICT(user_id) DO UPDATE SET last_active_at=excluded.last_active_at`).bind(me.id).run();
+      return reply({ok:true});
+    }
     // V5: API pesan. Selalu memerlukan sesi aktif dan keanggotaan chat.
     if(path.startsWith('/api/chat/')){
       const me=await userSession(request,env);
       if(!me)return reply({error:'Silakan masuk kembali.'},401);
       if(request.method==='POST'&&!allowOrigin(request))return reply({error:'Origin tidak diizinkan.'},403);
+      // Status mengetik aman untuk percakapan 1:1: hanya anggota yang boleh mengakses.
+      // Berlaku maksimal 9 detik tanpa pembaruan, sehingga tidak ada status tersangkut.
+      if(path==='/api/chat/typing'&&(request.method==='POST'||request.method==='GET')){
+        let id,isTyping;
+        if(request.method==='POST'){
+          let d;try{d=await readJSON(request)}catch{return reply({error:'Permintaan tidak valid'},400)}
+          id=clean(d.conversationId);isTyping=d.isTyping;
+          if(typeof isTyping!=='boolean')return reply({error:'Status mengetik tidak valid'},400);
+        }else id=clean(url.searchParams.get('conversationId'));
+        if(!/^[0-9a-f-]{36}$/.test(id))return reply({error:'Percakapan tidak valid'},400);
+        const chat=await env.DB.prepare('SELECT user_a,user_b FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)')
+          .bind(id,me.id,me.id).first();
+        if(!chat)return reply({error:'Percakapan tidak ditemukan.'},404);
+        await ensureTypingSchema(env);
+        if(request.method==='GET'){
+          const other=chat.user_a===me.id?chat.user_b:chat.user_a;
+          const state=await env.DB.prepare(`SELECT 1 AS active FROM tc_chat_typing
+            WHERE chat_id=? AND user_id=? AND expires_at>CAST(strftime('%s','now') AS INTEGER)`)
+            .bind(id,other).first();
+          return reply({ok:true,typing:!!state});
+        }
+        if(isTyping){
+          // Hindari penulisan berlebihan: setiap heartbeat hanya memperbarui bila mendekati kedaluwarsa.
+          await env.DB.prepare(`INSERT INTO tc_chat_typing(chat_id,user_id,expires_at)
+            VALUES(?,?,CAST(strftime('%s','now') AS INTEGER)+9)
+            ON CONFLICT(chat_id,user_id) DO UPDATE SET expires_at=excluded.expires_at
+            WHERE tc_chat_typing.expires_at<CAST(strftime('%s','now') AS INTEGER)+5`)
+            .bind(id,me.id).run();
+        }else{
+          await env.DB.prepare('DELETE FROM tc_chat_typing WHERE chat_id=? AND user_id=?')
+            .bind(id,me.id).run();
+        }
+        return reply({ok:true});
+      }
       if(path==='/api/chat/people'&&request.method==='GET'){
         const q=clean(url.searchParams.get('q')).toLowerCase();
         if(!/^[a-z0-9_]{2,24}$/.test(q))return reply({ok:true,people:[]});
-        const found=await env.DB.prepare('SELECT username,display_name FROM users WHERE email_verified=1 AND id!=? AND username LIKE ? ORDER BY username LIMIT 15').bind(me.id,q+'%').all();
+        await ensurePresenceSchema(env);
+        const found=await env.DB.prepare(`SELECT u.username,u.display_name,
+          p.last_active_at,
+          CASE WHEN p.last_active_at>=CAST(strftime('%s','now') AS INTEGER)-${PRESENCE_OFFLINE_SECONDS}
+            THEN 1 ELSE 0 END AS is_online
+          FROM users u LEFT JOIN tc_user_presence p ON p.user_id=u.id
+          WHERE u.email_verified=1 AND u.id!=? AND u.username LIKE ?
+          ORDER BY u.username LIMIT 15`).bind(me.id,q+'%').all();
         return reply({ok:true,people:found.results});
       }
       if(path==='/api/chat/start'&&request.method==='POST'){
@@ -367,9 +445,16 @@ export default {
         return reply({ok:true,conversationId:chat.id});
       }
       if(path==='/api/chat/conversations'&&request.method==='GET'){
+        await ensurePresenceSchema(env);
+        await ensureTypingSchema(env);
         await deliveredWhileOnline(env,me.id);
         const result=await env.DB.prepare(`SELECT c.id, c.created_at,
           u.username AS other_username,u.display_name AS other_name,
+          p.last_active_at,
+          CASE WHEN p.last_active_at>=CAST(strftime('%s','now') AS INTEGER)-${PRESENCE_OFFLINE_SECONDS}
+            THEN 1 ELSE 0 END AS is_online,
+          (EXISTS(SELECT 1 FROM tc_chat_typing t WHERE t.chat_id=c.id AND t.user_id=u.id
+             AND t.expires_at>CAST(strftime('%s','now') AS INTEGER))) AS is_typing,
           (SELECT m.body FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message,
           (SELECT m.created_at FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_time,
           (SELECT m.sender_id FROM tc_direct_messages m WHERE m.chat_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_sender_id,
@@ -384,6 +469,7 @@ export default {
              WHERE other_msg.chat_id=c.id AND other_msg.sender_id=u.id)) AS call_unlocked
           FROM tc_direct_chats c
           JOIN users u ON u.id=CASE WHEN c.user_a=? THEN c.user_b ELSE c.user_a END
+          LEFT JOIN tc_user_presence p ON p.user_id=u.id
           WHERE c.user_a=? OR c.user_b=?
           ORDER BY COALESCE(last_time,c.created_at) DESC LIMIT 100`).bind(me.id,me.id,me.id,me.id,me.id,me.id).all();
         return reply({ok:true,conversations:result.results});

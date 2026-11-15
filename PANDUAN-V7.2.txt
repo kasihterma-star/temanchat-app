@@ -1,0 +1,21 @@
+TEMANCHAT V7.2 — STATUS SEDANG MENGETIK
+
+• Pengguna A mengetik di chat -> pengguna B melihat "Sedang mengetik…" pada header, indikator titik, dan daftar teman.
+• Berhenti mengetik sekitar 3 detik -> indikator hilang.
+• Mengirim pesan, mengosongkan input, berpindah chat, atau menutup/menyembunyikan aplikasi -> indikator hilang.
+• Jika koneksi putus, status kedaluwarsa secara otomatis paling lambat sekitar 9 detik dari heartbeat terakhir.
+• Konten yang diketik TIDAK dikirim / disimpan, hanya flag aktivitas mengetik sementara.
+• Saat chat tidak dibuka, indikator di daftar percakapan diperbarui dengan daftar chat biasa (sekitar 8 detik).
+• Indikator pada header ketika membuka chat disegarkan tiap sekitar 2,2 detik.
+• Tetap menggunakan status Online / Terakhir Aktif dari V7.1 dan tema Glass Monokrom.
+
+PASANG SEKALI VIA GITHUB DESKTOP
+1. Buat cadangan folder repo yang aktif.
+2. Ekstrak ZIP V7.2.
+3. Salin isi ZIP ke Documents/GitHub/temanchat-app, pilih Replace.
+4. Commit: TemanChat V7.2 Sedang Mengetik, lalu Push origin.
+5. Cloudflare Deployments: pastikan Ready.
+6. Uji dua akun, khususnya mengetik tanpa mengirim, berhenti, dan mengganti chat.
+
+Tidak perlu mengedit D1 manual, tabel tc_chat_typing dibuat otomatis ketika fitur dipanggil.
+Tidak perlu mengubah VAPID, R2, TURN, atau database yang sudah terhubung.

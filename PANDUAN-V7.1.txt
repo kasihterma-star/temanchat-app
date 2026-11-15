@@ -1,0 +1,24 @@
+TEMANCHAT V7.1 — ONLINE, OFFLINE, TERAKHIR AKTIF
+
+YANG BERUBAH
+- Titik hijau di foto/ikon teman berarti Online.
+- Panel chat menunjukkan Online atau Terakhir aktif ...
+- Daftar chat menunjukkan status Online atau ringkasan waktu aktif.
+- Online dihitung berdasarkan heartbeat aplikasi aktif tiap 45 detik.
+- Setelah aplikasi tidak aktif sekitar 110 detik, status menjadi Offline.
+- Jika pengguna memiliki beberapa perangkat, tetap Online bila salah satu TemanChat terbuka.
+- Last active mengikuti waktu lokal perangkat yang melihat.
+- Tidak memerlukan R2, VAPID tambahan, ataupun SQL manual.
+
+INSTALASI
+1. Buat cadangan proyek GitHub sebelum menimpa file.
+2. Ekstrak ZIP dan salin ISI folder paket ke Documents\GitHub\temanchat-app (Replace).
+3. GitHub Desktop -> Commit: TemanChat V7.1 Status Online dan Terakhir Aktif -> Push origin.
+4. Periksa Cloudflare deployments status Ready; uji dua akun.
+5. Buka chat di HP A, lihat Online di HP B. Tutup PWA HP A, sekitar 2 menit kemudian menjadi Offline; Terakhir aktif tetap tampak.
+
+KEAMANAN / BATASAN
+- Tidak berbagi lokasi atau data perangkat. Hanya waktu aktivitas aplikasi.
+- Tidak sama dengan status Internet HP; push notification yang masuk tidak berarti Online.
+- Status Online dapat terlambat berubah hingga ~110 detik setelah aplikasi ditutup.
+- Tidak mengubah username, password, email, foto profil, chat, panggilan, notifikasi, atau pengaturan lainnya.

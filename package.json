@@ -1,12 +1,12 @@
 {
   "name": "temanchat-app",
-  "version": "7.0.1-beta",
+  "version": "7.3.0-beta",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "node --check src/index.js && node --check src/extras.js && node --check src/push.js && node --check public/app.js && node --check public/storage.js && node --check public/auth.js && node tests/check.mjs && node tests/push_crypto.mjs && node tests/v67_contract.mjs && node tests/v70_contract.mjs && python tests/call_eligibility.py"
+    "check": "node --check src/index.js && node --check src/extras.js && node --check src/push.js && node --check public/app.js && node --check public/storage.js && node --check public/auth.js && node tests/check.mjs && node tests/push_crypto.mjs && node tests/v67_contract.mjs && node tests/v70_contract.mjs && python tests/call_eligibility.py && python tests/presence_sql.py && node tests/v71_presence.mjs && node tests/v72_typing.mjs && python tests/typing_sql.py && node tests/v73_install.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

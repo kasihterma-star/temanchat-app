@@ -16,6 +16,8 @@ con.executescript('''
  CREATE TABLE tc_direct_messages(id INTEGER PRIMARY KEY,chat_id TEXT,sender_id TEXT,body TEXT,created_at TEXT);
  CREATE TABLE users(id TEXT PRIMARY KEY,username TEXT,display_name TEXT);
  CREATE TABLE tc_chat_receipts(chat_id TEXT,user_id TEXT,read_id INTEGER);
+ CREATE TABLE tc_user_presence(user_id TEXT PRIMARY KEY,last_active_at INTEGER);
+ CREATE TABLE tc_chat_typing(chat_id TEXT,user_id TEXT,expires_at INTEGER,PRIMARY KEY(chat_id,user_id));
  INSERT INTO users VALUES('a','a_abc','A'),('b','b_abc','B');
  INSERT INTO tc_direct_chats VALUES('chat1','a','b',CURRENT_TIMESTAMP);
 ''')
@@ -36,6 +38,6 @@ import re
 m=re.search(r"const result=await env\.DB\.prepare\(`(SELECT c\.id, c\.created_at,[\s\S]*?LIMIT 100)`\)\.bind\(me\.id,me\.id,me\.id,me\.id,me\.id,me\.id\)\.all\(\)",worker)
 assert m, 'Conversation query/bindings mismatch'
 con.execute("INSERT INTO tc_chat_receipts VALUES('chat1','a',0)")
-rows=con.execute(m.group(1),('a','a','a','a','a','a')).fetchall()
+rows=con.execute(m.group(1).replace('${PRESENCE_OFFLINE_SECONDS}','110'),('a','a','a','a','a','a')).fetchall()
 assert len(rows)==1 and rows[0][-1]==1, 'Conversation should be unlocked after two-way exchange'
 print('PASS: panggilan baru terkunci sampai kedua akun masing-masing membalas, lalu terbuka dua arah.')
