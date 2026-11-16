@@ -1,0 +1,35 @@
+TEMANCHAT V7.7 — GOOGLE DRIVE + LOGO TERBARU
+Dibangun di atas TemanChat V7.6 REBUILD-BERSIH-DARI-V7.5.
+
+FITUR BARU:
+- Pengaturan: Hubungkan Google Drive -> pilihan akun Google -> persetujuan -> kembali ke chat.
+- Koneksi tetap tersimpan per AKUN TemanChat: access token dan refresh token dienkripsi AES-GCM di D1.
+- Cek status dan Putuskan koneksi.
+- Menu media ⋯ > Simpan ke Google Drive: mengunggah foto/video/file dari penerima ke Drive miliknya.
+- Jika preferensi Google Drive aktif, backup berjalan saat pengguna membuka media di TemanChat pada Wi-Fi yang terdeteksi; bukan backup latar otomatis ketika aplikasi tertutup.
+- R2 tidak dihapus pada saat backup berhasil; penghapusan tetap mengikuti keamanan cron.
+- Ikon PWA, favicon, dan logo chat/login mengikuti file logo TemanChat yang sudah dibuat.
+- Halaman tentang, privasi, dan ketentuan layanan disertakan.
+
+MEMASANG:
+1. BACKUP folder GitHub temanchat-app dan jangan hapus D1 atau R2.
+2. Ekstrak ZIP, salin SELURUH isinya langsung ke folder repo GitHub, pilih REPLACE.
+3. Periksa GitHub Desktop. Pastikan tidak ada tulisan <<<<<<< / ======= / >>>>>>> di berkas.
+4. Commit "V7.7 Google Drive OAuth dan Logo" lalu Push origin.
+5. Cloudflare Worker Deployments harus Ready. Refresh aplikasi di browser; untuk ikon PWA yang terpasang mungkin perlu instal ulang.
+6. Google Auth Platform: Authorized redirect URI harus persis https://chat.ege.my.id/api/google/callback
+7. Cloudflare production secrets (sudah pengguna pasang): GOOGLE_CLIENT_ID dan GOOGLE_CLIENT_SECRET.
+8. Buka TemanChat > Pengaturan > Hubungkan Google Drive, pilih akun yang diizinkan.
+9. Uji SIMPAN foto JPG 1 MB ke Drive. Periksa file pada akun Drive yang baru saja dipilih.
+
+TIDAK PERLU MIGRASI SQL MANUAL. Dua tabel D1 akan dibuat saat endpoint Google pertama digunakan.
+JANGAN kirim Client Secret atau token Google melalui pesan, screenshot, atau GitHub.
+JANGAN rotasi GOOGLE_CLIENT_SECRET tanpa rencana migrasi, karena kunci enkripsi token diturunkan dari nilai itu.
+
+BATASAN JUJUR:
+- OAuth dan upload terimplementasi, tetapi belum diuji pada Cloudflare/Google asli milik pengguna.
+- Upload via Worker V7.7 dibatasi 20 MB/file. File besar butuh resumable upload terpisah, BELUM tersedia.
+- Google Drive backup otomatis HANYA ketika app aktif, media dibuka, Wi-Fi dapat diidentifikasi, akun Google terhubung. Ini belum mekanisme backup latar menyeluruh.
+- Google OAuth berstatus Production namun bisa membutuhkan verifikasi branding Google. Status Production BUKAN jaminan akses semua pengguna.
+- Nextcloud belum terhubung.
+- Penghapusan R2 tetap mengikuti kebijakan lama; jangan anggap backup belum diverifikasi sebagai aman dihapus.

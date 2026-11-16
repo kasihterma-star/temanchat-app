@@ -1,0 +1,12 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const api=fs.readFileSync('src/google-drive.js','utf8');
+const app=fs.readFileSync('public/app.js','utf8');
+const storage=fs.readFileSync('public/storage.js','utf8');
+const index=fs.readFileSync('src/index.js','utf8');
+for(const route of ['/api/google/connect','/api/google/callback','/api/google/status','/api/google/disconnect','/api/google/upload'])assert(api.includes(route),route);
+for(const s of ['AES-GCM','additionalData','session_hash','code_challenge_method','refresh_token','drive.file','DELETE FROM tc_google_oauth_states'])assert(api.includes(s),s);
+assert(index.includes('handleGoogle(request,env,me)'));
+assert(storage.includes('/api/google/status'));
+assert(app.includes('Putuskan Google Drive'));
+for(const s of ['GOOGLE_CLIENT_SECRET','GOOGLE_CLIENT_ID'])assert(!storage.includes(s),'Secret harus server-side');
+console.log('V7.7 OAuth structure checks OK');
