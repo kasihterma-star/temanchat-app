@@ -1,6 +1,7 @@
 import { pushApi, sendPush } from './push.js';
 // TemanChat V6 terpadu: login, chat, media R2 opsional, sinyal WebRTC.
 import { ensureExtras, handleExtra, cleanup } from './extras.js';
+import { ensureReplySchema, validateReply, storeReply } from './replies.js';
 const HOST = 'chat.ege.my.id';
 const FROM = 'TemanChat <noreply@temanchat.ege.my.id>';
 const SITE_KEY = '0x4AAAAAAF8MtCXwBz83LC5d';
@@ -173,7 +174,7 @@ export default {
       }
       return reply({ok:Object.values(checks).every(c=>c.ready),checks});
     }
-    if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.1.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:false});
+    if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.4.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:false});
     if(path==='/api/auth/config'&&request.method==='GET')return reply({siteKey:SITE_KEY,authReady:Boolean(env.DB&&env.RESEND_API_KEY&&env.TURNSTILE_SECRET_KEY)});
     if(path==='/api/auth/me'&&request.method==='GET'){
       const u=await userSession(request,env);return u?reply({ok:true,user:publicUser(u)}):reply({ok:false},401);
@@ -487,9 +488,13 @@ export default {
         let mediaSchemaReady=true;
         try { await ensureExtras(env); }
         catch(e) { mediaSchemaReady=false; console.error('Schema media unavailable, serving text-only',e?.message); }
+        await ensureReplySchema(env);
+        const replyProjection=`,r.reply_to_id,original.body AS reply_body,original.sender_id AS reply_sender_id
+          FROM tc_direct_messages m LEFT JOIN tc_reply_links r ON r.message_id=m.id
+          LEFT JOIN tc_direct_messages original ON original.id=r.reply_to_id AND original.chat_id=m.chat_id`;
         const projection=mediaSchemaReady
-          ? 'SELECT m.id,m.sender_id,m.body,m.created_at,l.media_id,f.mime_type FROM tc_direct_messages m LEFT JOIN tc_media_links l ON l.message_id=m.id LEFT JOIN tc_media_items f ON f.id=l.media_id'
-          : 'SELECT m.id,m.sender_id,m.body,m.created_at FROM tc_direct_messages m';
+          ? 'SELECT m.id,m.sender_id,m.body,m.created_at,l.media_id,f.mime_type'+replyProjection+' LEFT JOIN tc_media_links l ON l.message_id=m.id LEFT JOIN tc_media_items f ON f.id=l.media_id'
+          : 'SELECT m.id,m.sender_id,m.body,m.created_at'+replyProjection;
         const sql=after>0
           ? projection+' WHERE m.chat_id=? AND m.id>? ORDER BY m.id ASC LIMIT 100'
           : projection+' WHERE m.id IN (SELECT id FROM tc_direct_messages WHERE chat_id=? ORDER BY id DESC LIMIT 100) ORDER BY m.id ASC';
@@ -557,7 +562,10 @@ export default {
         if(!await rate('burst',Math.floor(now/5000),10))return reply({error:'Terlalu cepat. Tunggu beberapa detik sebelum mengirim lagi.'},429);
         const bodyHash=await sha(body.toLocaleLowerCase('id-ID'));
         if(!await rate('repeat:'+id+':'+bodyHash,Math.floor(now/60000),50))return reply({error:'Pesan sama sudah dikirim 50 kali dalam satu menit. Coba lagi nanti.'},429);
+        let replyTo;
+        try{replyTo=await validateReply(env,id,d.replyToId)}catch(e){return reply({error:e.message},400)}
         const sent=await env.DB.prepare('INSERT INTO tc_direct_messages(chat_id,sender_id,body) VALUES(?,?,?) RETURNING id,created_at').bind(id,me.id,body).first();
+        if(replyTo)await storeReply(env,sent.id,id,replyTo);
         const recipientId=access.user_a===me.id?access.user_b:access.user_a;
         // Jumlah unread dari D1 agar angka badge bukan sekadar jumlah notifikasi yang diterima.
         await ensureReceiptSchema(env);
@@ -569,7 +577,7 @@ export default {
         ctx?.waitUntil(sendPush(env,recipientId,{title:'TemanChat',body:'Pesan baru dari '+me.display_name,
           url:'/?chat='+encodeURIComponent(id),tag:'tc-message-'+id+'-'+sent.id,kind:'message',
           conversationId:id,messageId:sent.id,unreadCount:Number(badgeRow?.n||0)},86400));
-        return reply({ok:true,message:{id:sent.id,sender_id:me.id,body,created_at:sent.created_at}});
+        return reply({ok:true,message:{id:sent.id,sender_id:me.id,body,created_at:sent.created_at,reply_to_id:replyTo?.id||null,reply_body:replyTo?.body||null,reply_sender_id:replyTo?.sender_id||null}});
       }
       return reply({error:'Endpoint chat tidak ditemukan.'},404);
     }

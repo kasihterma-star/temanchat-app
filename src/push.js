@@ -16,7 +16,10 @@ export async function ensurePushSchema(env){
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL, endpoint TEXT NOT NULL UNIQUE,
   p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   last_success_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
- )`).run().then(()=>env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_tc_push_user ON tc_push_subscriptions(user_id)').run()).catch(e=>{schemaPromise=null;throw e});
+ )`).run().then(()=>env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_tc_push_user ON tc_push_subscriptions(user_id)').run()).then(()=>env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_push_focus (
+  subscription_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, chat_id TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+ )`).run()).then(()=>env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_tc_push_focus_user ON tc_push_focus(user_id,chat_id,updated_at)').run()).catch(e=>{schemaPromise=null;throw e});
  return schemaPromise;
 }
 function allowedEndpoint(raw){
@@ -49,9 +52,30 @@ export async function pushApi(request,env,me){
   (SELECT id FROM tc_push_subscriptions WHERE user_id=? ORDER BY created_at DESC LIMIT 8)`).bind(me.id,me.id).run();
   return json({enabled:true});
  }
+ if(path==='/api/push/active-chat'){
+  // Satu perangkat hanya boleh melaporkan fokus langganan push miliknya sendiri.
+  const endpoint=String(body?.endpoint||'');
+  if(!allowedEndpoint(endpoint))return json({error:'Perangkat push tidak valid.'},400);
+  const sub=await env.DB.prepare('SELECT id FROM tc_push_subscriptions WHERE endpoint=? AND user_id=?').bind(endpoint,me.id).first();
+  if(!sub)return json({error:'Langganan perangkat tidak ditemukan.'},404);
+  const id=body?.active===true?String(body?.conversationId||''):'';
+  if(id){
+   if(!/^[0-9a-f-]{36}$/i.test(id))return json({error:'Percakapan tidak valid.'},400);
+   const member=await env.DB.prepare('SELECT id FROM tc_direct_chats WHERE id=? AND (user_a=? OR user_b=?)').bind(id,me.id,me.id).first();
+   if(!member)return json({error:'Tidak mempunyai akses percakapan.'},403);
+   await env.DB.prepare(`INSERT INTO tc_push_focus(subscription_id,user_id,chat_id,updated_at) VALUES(?,?,?,CURRENT_TIMESTAMP)
+      ON CONFLICT(subscription_id) DO UPDATE SET user_id=excluded.user_id,chat_id=excluded.chat_id,updated_at=CURRENT_TIMESTAMP`)
+     .bind(sub.id,me.id,id).run();
+  }else{
+   await env.DB.prepare('DELETE FROM tc_push_focus WHERE subscription_id=? AND user_id=?').bind(sub.id,me.id).run();
+  }
+  return json({active:!!id});
+ }
  if(path==='/api/push/unsubscribe'){
   const endpoint=String(body?.endpoint||'');
   if(!allowedEndpoint(endpoint))return json({error:'Endpoint tidak valid.'},400);
+  const sub=await env.DB.prepare('SELECT id FROM tc_push_subscriptions WHERE user_id=? AND endpoint=?').bind(me.id,endpoint).first();
+  if(sub)await env.DB.prepare('DELETE FROM tc_push_focus WHERE subscription_id=?').bind(sub.id).run();
   await env.DB.prepare('DELETE FROM tc_push_subscriptions WHERE user_id=? AND endpoint=?').bind(me.id,endpoint).run();
   return json({enabled:false});
  }
@@ -112,6 +136,15 @@ export async function sendPush(env,userId,payload,ttl=120){
  if(!env.VAPID_PRIVATE_KEY||!env.VAPID_PUBLIC_KEY||!userId)return;
  try{
   await ensurePushSchema(env);
+  // Jika salah satu perangkat sedang aktif melihat chat INI, jangan kirim Web Push.
+  // Status fokus kedaluwarsa cepat untuk menghindari membisukan setelah layar dikunci.
+  if(payload?.kind==='message'&&typeof payload.conversationId==='string'){
+   const focused=await env.DB.prepare(`SELECT 1 FROM tc_push_focus f
+     JOIN tc_push_subscriptions s ON s.id=f.subscription_id AND s.user_id=f.user_id
+     WHERE f.user_id=? AND f.chat_id=? AND f.updated_at>=datetime('now','-23 seconds') LIMIT 1`)
+    .bind(userId,payload.conversationId).first();
+   if(focused)return;
+  }
   const rows=await env.DB.prepare('SELECT id,endpoint,p256dh,auth FROM tc_push_subscriptions WHERE user_id=? LIMIT 8').bind(userId).all();
   await Promise.allSettled(rows.results.map(r=>transmit(env,r,payload,ttl)));
  }catch(e){console.warn('Web push dispatch',e.message)}

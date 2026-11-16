@@ -1,0 +1,25 @@
+TemanChat V7.4 — Panduan ringkas
+
+Pemasangan:
+1. Ekstrak ZIP, salin semua isi ke folder repository temanchat-app.
+2. Klik Replace, lalu GitHub Desktop > Commit > Push origin.
+3. Pastikan Cloudflare Worker Ready, binding DB = temanchat-db dan MEDIA = temanchat-media.
+4. Buka aplikasi di desktop dan HP, lalu uji dua akun.
+
+Uji fitur:
+- Dari teman, kirim foto; akun penerima pertama kali membuka chat foto.
+- Muncul pemberitahuan sekali dengan Mengerti / Pengaturan. Ulang buka chat: tidak muncul lagi.
+- Di HP geser pesan ke kanan lalu kirim balasan; di desktop gunakan menu titik tiga → Balas.
+- Periksa balasan tetap ada setelah refresh.
+- Di HP tahan ikon mikrofon → lepaskan untuk kirim. Geser ke atas untuk kunci; gunakan jeda/batal/kirim.
+- Di desktop klik mikrofon untuk memulai, klik Kirim atau Batal pada panel.
+- Uji file media menu titik tiga untuk menyimpan manual.
+- Pengaturan > Penyimpanan & Media: bawaan tidak simpan otomatis; bila mendukung, bisa pilih folder lokal.
+
+Batasan yang belum aktif:
+- Google Drive file besar belum aktif (perlu OAuth dan proses berbagi aman).
+- Nextcloud belum aktif. Jangan mengira file tersimpan di cloud jika belum benar-benar terhubung.
+- Foto/video/dokumen max 20 MB, audio max 25 MB/3 menit.
+- Penyimpanan galeri otomatis di iPhone tidak bisa dijamin oleh PWA; opsi browser tersedia sesuai perangkat.
+
+Kalau error, kirim screenshot dan pesan dari Cloudflare Workers > Observability > Logs. Jangan kirim password/API key.
