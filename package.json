@@ -1,12 +1,20 @@
 {
   "name": "temanchat-app",
+<<<<<<< HEAD
   "version": "7.6.0-beta",
+=======
+  "version": "7.5.0-beta",
+>>>>>>> ab2fb14b2bbe2c86d1fd2149a08eecedb51f74f3
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+<<<<<<< HEAD
     "check": "node --check src/index.js && node --check src/replies.js && node --check src/extras.js && node --check src/push.js && node --check public/app.js && node --check public/storage.js && node --check public/auth.js && node tests/check.mjs && node tests/push_crypto.mjs && node tests/v67_contract.mjs && node tests/v70_contract.mjs && python tests/call_eligibility.py && python tests/presence_sql.py && node tests/v71_presence.mjs && node tests/v72_typing.mjs && python tests/typing_sql.py && node tests/v73_install.mjs && node tests/v74_contract.mjs && python tests/v74_sql.py && node tests/v75_smart_notifications.mjs && node tests/v76_photo_reply.mjs"
+=======
+    "check": "node --check src/index.js && node --check src/replies.js && node --check src/extras.js && node --check src/push.js && node --check public/app.js && node --check public/storage.js && node --check public/auth.js && node tests/check.mjs && node tests/push_crypto.mjs && node tests/v67_contract.mjs && node tests/v70_contract.mjs && python tests/call_eligibility.py && python tests/presence_sql.py && node tests/v71_presence.mjs && node tests/v72_typing.mjs && python tests/typing_sql.py && node tests/v73_install.mjs && node tests/v74_contract.mjs && python tests/v74_sql.py && node tests/v75_smart_notifications.mjs"
+>>>>>>> ab2fb14b2bbe2c86d1fd2149a08eecedb51f74f3
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

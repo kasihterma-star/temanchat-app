@@ -464,6 +464,7 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 .tc-audio-controls audio{flex:1;min-width:0;width:min(100%,255px)}
 .tc-audio-speed{border:1px solid var(--line);background:var(--head);color:var(--strong);border-radius:10px;
  font-size:11px;font-weight:800;flex:0 0 39px;padding:8px 4px;cursor:pointer}
+<<<<<<< HEAD
 
 /* V7.6: reply action remains inside the phone viewport */
 #messages{min-width:0;overflow-x:hidden}
@@ -500,3 +501,5 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 .tc-photo-preview-bottom{display:flex;gap:9px}
 .tc-photo-preview-bottom button{flex:1}
 #photoPreviewSend{background:var(--accent);color:#fff;border-color:var(--accent)}
+=======
+>>>>>>> ab2fb14b2bbe2c86d1fd2149a08eecedb51f74f3
