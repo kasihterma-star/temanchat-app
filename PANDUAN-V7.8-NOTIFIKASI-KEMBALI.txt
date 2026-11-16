@@ -1,0 +1,27 @@
+TEMANCHAT V7.8 — NOTIFIKASI & TOMBOL KEMBALI
+
+DASAR: V7.7 Google Drive + logo baru.
+
+APA YANG BERUBAH
+1. Pengaturan → Mode notifikasi: Suara + Getar, Suara saja, Getar saja, Senyap.
+2. Pilihan disimpan pada perangkat dan disinkronkan ke Service Worker melalui IndexedDB.
+3. Tombol Tes getar perangkat untuk mengetahui dukungan API getar.
+4. Nada panggilan saat aplikasi aktif mengikuti pilihan suara ON/OFF.
+5. Tombol Kembali di dalam TemanChat tetap kembali ke daftar chat; dialog dapat ditutup dengan tombol X.
+6. Tombol Back bawaan Android TIDAK ditangkap oleh JS aplikasi. Navigasi keluar ditangani browser/OS, sehingga perilaku masuk ke beranda HP bergantung pada Android/Chrome/PWA dan riwayat browser. Tidak mungkin menjaminnya di semua perangkat.
+7. Semua fitur chat, R2, dan OAuth Google Drive dari V7.7 dipertahankan.
+
+BATASAN PENTING
+- PWA tidak bisa memaksa suara atau getar notifikasi ketika aplikasi tertutup: Android/iOS/browser dan kanal notifikasi sistem menentukan hasil akhir.
+- Kombinasi silent=true dan vibrate di Notification API tidak dapat diandalkan; mode Getar saja meminta notifikasi senyap pada sistem dan tes getar hanya pada halaman aktif. Untuk getar notifikasi ketika aplikasi tertutup, atur kategori notifikasi TemanChat melalui pengaturan Android.
+- Mode ini per perangkat, bukan disinkronkan ke akun Google Drive.
+- Menggunakan browser Back dapat menutup aplikasi, kembali ke URL sebelumnya, atau melakukan perilaku OS lain.
+
+CARA UPDATE
+1. Backup folder repo temanchat-app.
+2. Ekstrak ZIP, salin semua file ke repo lokal dengan Replace.
+3. Commit & Push origin dari GitHub Desktop.
+4. Tunggu deployment Cloudflare selesai, kemudian muat ulang PWA.
+5. Tes Pengaturan → Mode notifikasi, Tes getar, dan tombol Kembali internal vs tombol sistem Android.
+
+Tidak perlu mengubah Google Cloud atau Secret Cloudflare.

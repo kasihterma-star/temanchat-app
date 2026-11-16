@@ -41,7 +41,8 @@ const seenChatLast=new Map();
 function notifySupported(){return 'Notification' in window&&window.isSecureContext}
 async function notifyLocal(title,body,tag){
  if(!notificationsEnabled()||!notifySupported()||Notification.permission!=='granted')return false;
- const options={body,tag,icon:'/icons/icon-192.png',renotify:true};
+ const mode=notificationMode();
+ const options={body,tag,icon:'/icons/icon-192.png',renotify:true,...notificationStyle(mode)};
  // Hindari serviceWorker.ready yang dapat menggantung sebelum worker aktif.
  try{
   if('serviceWorker' in navigator){
@@ -61,7 +62,26 @@ async function notifyLocal(title,body,tag){
 let serverPushEnabled=false,serverPushEndpoint='';
 const NOTIFY_PREF='tc_notifications_enabled';
 const notificationsEnabled=()=>localStorage.getItem(NOTIFY_PREF)!=='off';
-const audioPreference=()=>notificationsEnabled()&&localStorage.getItem('tc_call_sounds')!=='off';
+const NOTIFY_MODE_KEY='tc_notification_mode_v78';
+const notificationMode=()=>{
+ const mode=localStorage.getItem(NOTIFY_MODE_KEY)||'both';
+ return ['both','sound','vibrate','silent'].includes(mode)?mode:'both';
+};
+const notificationStyle=mode=>({
+ silent:mode==='silent'||mode==='vibrate',
+ // Opsi vibrate hanya bersifat best-effort: OS/browser dapat mengabaikannya.
+ ...(mode==='both'?{vibrate:[180,90,180]}:{})
+});
+const soundAllowed=()=>['both','sound'].includes(notificationMode());
+const vibrationAllowed=()=>notificationsEnabled()&&['both','vibrate'].includes(notificationMode());
+const audioPreference=()=>notificationsEnabled()&&soundAllowed()&&localStorage.getItem('tc_call_sounds')!=='off';
+function syncNotificationModeWorker(){
+ try{const mode=notificationMode();if(navigator.serviceWorker?.controller)navigator.serviceWorker.controller.postMessage({type:'tc-notification-mode',mode});
+  void navigator.serviceWorker?.ready?.then(reg=>{reg.active?.postMessage({type:'tc-notification-mode',mode})}).catch(()=>{});
+ }catch(e){console.warn('Preferensi notifikasi ke SW',e)}
+}
+function vibrateForCall(){if(vibrationAllowed()&&typeof navigator.vibrate==='function'&&!document.hidden)navigator.vibrate([220,120,220,120,350])}
+
 // Smart Notification: jangan membunyikan notifikasi hanya bila chat yang sama
 // benar-benar terlihat dan sedang menjadi layar utama pengguna.
 const visibleChatId=()=>{
@@ -929,6 +949,20 @@ $('settingsBtn').onclick=()=>{
  driveGroup.append(driveState,connect,disconnect);
  wrap.append(driveGroup);void refreshDrive();
  wrap.append(element('small','','Simpan permanen ke Nextcloud memerlukan konektor server tambahan. Tidak dianggap sudah tersimpan sebelum konektor benar-benar tersedia.'));
+ // Mode lokal per perangkat, dikirim ke Service Worker agar push ketika aplikasi tertutup
+ // tetap menghormati pilihan bila browser mendukung properti silent/vibrate.
+ const modeTitle=element('label','','Mode notifikasi pesan dan panggilan');
+ const modeSelect=element('select','tc-notify-mode');
+ for(const [value,label] of [['both','🔔 Suara + Getar'],['sound','🔊 Suara saja'],['vibrate','📳 Getar saja'],['silent','🔕 Senyap (visual saja)']]){
+  const option=element('option','',label);option.value=value;modeSelect.append(option);
+ }
+ modeSelect.value=notificationMode();modeSelect.setAttribute('aria-label','Mode suara dan getar notifikasi');
+ const modeHelp=element('small','','Pengaturan suara dan getar notifikasi sistem tetap ditentukan Android/iOS. Getar dari PWA tidak dijamin pada semua perangkat.');
+ modeSelect.onchange=()=>{localStorage.setItem(NOTIFY_MODE_KEY,modeSelect.value);syncNotificationModeWorker();
+   if(!audioPreference())stopCallTone();toast('Mode notifikasi disimpan di perangkat ini.');
+   toneButton.textContent=audioPreference()?'Suara panggilan: Aktif':'Suara panggilan: Nonaktif';
+ };
+ wrap.append(modeTitle,modeSelect,modeHelp);
  const notifyButton=element('button','primary','Memeriksa notifikasi…');
  const showPushState=async()=>{
    // Perhatikan pengaturan pengguna, bukan hanya apakah Web Push tersedia.
@@ -950,7 +984,7 @@ $('settingsBtn').onclick=()=>{
       if(navigator.clearAppBadge)void navigator.clearAppBadge().catch(()=>{});
       toast('Semua notifikasi dan bunyi panggilan TemanChat dimatikan pada perangkat ini.');
     }else{
-      await registerPush();localStorage.setItem(NOTIFY_PREF,'on');updateNotificationFocus(true);
+      await registerPush();localStorage.setItem(NOTIFY_PREF,'on');syncNotificationModeWorker();updateNotificationFocus(true);
       toast('Notifikasi TemanChat diaktifkan pada perangkat ini.');
     }
   }catch(e){toast('Pengaturan notifikasi gagal: '+e.message)}
@@ -964,6 +998,14 @@ $('settingsBtn').onclick=()=>{
  const pushTest=element('button','primary','Kirim notifikasi uji');
  pushTest.onclick=async()=>{if(!notificationsEnabled())return toast('Aktifkan notifikasi dahulu.');try{const d=await post('/api/push/test',{});toast(d.sent?'Tes terkirim. Cek notifikasi perangkat.':'Push ditolak penyedia. Periksa Log Cloudflare.')}catch(e){toast(e.message)}};
  wrap.append(pushTest);
+ const vibrateTest=element('button','tc-media-action','Tes getar perangkat');
+ vibrateTest.onclick=()=>{
+  if(!notificationsEnabled())return toast('Notifikasi sedang OFF.');
+  if(!vibrationAllowed())return toast('Pilih Suara + Getar atau Getar saja terlebih dahulu.');
+  if(typeof navigator.vibrate!=='function')return toast('Browser/perangkat ini tidak mendukung getaran dari website.');
+  const ok=navigator.vibrate([160,100,220]);toast(ok?'Perintah getar dikirim.':'Perangkat menolak perintah getar.');
+ };
+ wrap.append(vibrateTest);
  if(!runningAsApp()){const install=element('button','primary','Instal TemanChat');install.onclick=()=>{$('modal').close();void triggerTemanChatInstall()};wrap.append(install);}
  const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{
    try{
@@ -1085,6 +1127,7 @@ function showCallUI(kind,name,incoming,username){
  $('callRemote').style.display='flex';$('callAvatar').style.display='grid';$('remoteVideo').style.display='none';$('localVideo').style.display='none';
  $('acceptCall').hidden=!incoming;$('cameraCall').hidden=kind!=='video';callLabel(incoming?'Panggilan masuk…':'Memanggil…');
  if(!dlg.open)dlg.showModal();
+ if(!currentCall?.isCaller)vibrateForCall();
  startCallTone(incoming?'incoming':'outgoing');
 }
 function closeCallUI(){
@@ -1213,7 +1256,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.5'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.8'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
@@ -1241,7 +1284,13 @@ window.addEventListener('blur',leaveNotificationFocus);
 window.addEventListener('focus',()=>updateNotificationFocus(true));
 window.addEventListener('pagehide',leaveNotificationFocus);
 window.addEventListener('focus',()=>{if(Date.now()-lastPresenceBeat>PRESENCE_PING_MS)void heartbeatPresence()});
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(console.warn));
+if('serviceWorker' in navigator){
+ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').then(syncNotificationModeWorker).catch(console.warn));
+ navigator.serviceWorker.addEventListener('controllerchange',syncNotificationModeWorker);
+}
+// V7.8: tidak menambahkan pushState atau intercept popstate. Tombol Kembali
+// bawaan Android tetap milik browser/OS, bukan dipaksa kembali ke daftar chat.
+// Tombol Kembali internal (#backBtn), tombol tutup dialog, tetap bekerja bertahap.
 // Mode tema dapat langsung diubah tanpa masuk ke Pengaturan.
 document.querySelectorAll('[data-tc-theme]').forEach(button=>{
  button.addEventListener('click',()=>applyTheme(button.dataset.tcTheme));
