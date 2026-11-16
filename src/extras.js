@@ -1,3 +1,4 @@
+import { googleAccessToken } from './google-drive.js';
 // TemanChat V7.4: media transit (R2), audio voice notes, preferensi, panggilan.
 import { validateReply, storeReply } from './replies.js';
 // Tabel tambahan dibuat otomatis saat endpoint V6 pertama kali dipakai.
@@ -210,7 +211,7 @@ export async function handleExtra(request, env, me, deps){
    if(!f)return bad('Media tidak ditemukan.',404);
    if(f.sender_id===me.id)return bad('Pengirim tidak perlu mengonfirmasi cadangan penerima.');
    if(d.storageType!=='google_drive')return bad('Penghapusan otomatis R2 hanya setelah backup Drive diverifikasi. Penyimpanan lokal tetap dapat digunakan tanpa penghapusan dini.');
-   const fileId=trimmed(d.driveFileId),token=trimmed(d.accessToken);
+   const fileId=trimmed(d.driveFileId),token=await googleAccessToken(env,me.id);
    if(!/^[\w-]{10,200}$/.test(fileId)||token.length<30||token.length>4096)return bad('Verifikasi Drive tidak valid.');
    let google;
    try {const g=await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,size,trashed,md5Checksum`,{

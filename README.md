@@ -1,3 +1,28 @@
+# TemanChat V7.6 — Rebuild bersih dari V7.5
+
+Sumber: ZIP V7.5 yang diunggah pengguna. Versi ini tidak memakai file repository GitHub yang sempat mengandung konflik merge.
+
+## Yang berubah dari V7.5
+
+- Foto memiliki pratinjau sebelum dikirim dengan tombol **Mode Cermin: Mati/Aktif**. Bawaan Normal, sehingga foto kamera atau galeri tidak dibalik tanpa pilihan pengguna.
+- Tindakan **Batal** tidak mengunggah media.
+- Tampilan kutipan dan menu **Balas** di HP dibatasi supaya tidak keluar dari layar.
+- File cache PWA dinaikkan ke V7.6.
+- Fitur lain termasuk R2, chat, suara, panggilan, dan notifikasi tetap mengikuti V7.5.
+
+## Pemasangan aman
+
+1. Cadangkan folder proyek `Documents\GitHub\temanchat-app`.
+2. Ekstrak ZIP ini. **Salin isi ZIP** (bukan folder ZIP) ke dalam folder repository, pilih Replace.
+3. Jangan memakai menu merge GitHub untuk menggabungkan file yang konflik.
+4. Pastikan `package.json` dan `public/index.html` di repository tidak mengandung `<<<<<<<`, `=======`, atau `>>>>>>>`. Bila file tersebut sudah rusak, ganti dari paket ini.
+5. GitHub Desktop: Commit ke main, lalu Push origin.
+6. Periksa build Cloudflare sampai Ready. Jika gagal, baca Build logs.
+7. Refresh browser atau buka ulang PWA, uji foto dengan pratinjau dan menu Balas.
+
+R2 menggunakan binding `MEDIA` dan D1 menggunakan `DB`; jangan menghapus binding atau secret yang sudah ada.
+
+Catatan: tidak ada perubahan schema database untuk fitur pratinjau foto ini. Penggunaan kamera bawaan iPhone tidak selalu mengungkap preferensi mirror, sehingga aplikasi menyediakan pilihan mirror manual.
 # TemanChat V7.5 FULL — Smart Notification, Swipe Reply, Voice Glass
 
 Paket lengkap penerus TemanChat V7.4. Desain **Glass Monokrom** dan seluruh fitur lama (akun, status online, R2, Web Push, centang, media, panggilan, foto profil, dan rekam suara) dipertahankan.

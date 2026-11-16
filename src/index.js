@@ -1,4 +1,5 @@
 import { pushApi, sendPush } from './push.js';
+import { handleGoogle } from './google-drive.js';
 // TemanChat V6 terpadu: login, chat, media R2 opsional, sinyal WebRTC.
 import { ensureExtras, handleExtra, cleanup } from './extras.js';
 import { ensureReplySchema, validateReply, storeReply } from './replies.js';
@@ -174,7 +175,7 @@ export default {
       }
       return reply({ok:Object.values(checks).every(c=>c.ready),checks});
     }
-    if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.4.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:false});
+    if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.4.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:Boolean(env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET)});
     if(path==='/api/auth/config'&&request.method==='GET')return reply({siteKey:SITE_KEY,authReady:Boolean(env.DB&&env.RESEND_API_KEY&&env.TURNSTILE_SECRET_KEY)});
     if(path==='/api/auth/me'&&request.method==='GET'){
       const u=await userSession(request,env);return u?reply({ok:true,user:publicUser(u)}):reply({ok:false},401);
@@ -580,6 +581,10 @@ export default {
         return reply({ok:true,message:{id:sent.id,sender_id:me.id,body,created_at:sent.created_at,reply_to_id:replyTo?.id||null,reply_body:replyTo?.body||null,reply_sender_id:replyTo?.sender_id||null}});
       }
       return reply({error:'Endpoint chat tidak ditemukan.'},404);
+    }
+    if(path.startsWith('/api/google/')) {
+      const me=await userSession(request,env);
+      return await handleGoogle(request,env,me);
     }
     if(path.startsWith('/api/media/')||path.startsWith('/api/calls/')) {
       const me=await userSession(request,env);

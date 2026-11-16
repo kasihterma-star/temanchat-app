@@ -9,16 +9,16 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/style.css?v=7.5.0">
-  <link rel="stylesheet" href="/v6.css?v=7.5.0">
-  <script src="/config.js?v=7.5.0" defer></script>
-  <script src="/storage.js?v=7.5.0" defer></script>
-  <script src="/app.js?v=7.5.0" defer></script>
+  <link rel="stylesheet" href="/style.css?v=7.7.0">
+  <link rel="stylesheet" href="/v6.css?v=7.7.0">
+  <script src="/config.js?v=7.7.0" defer></script>
+  <script src="/storage.js?v=7.7.0" defer></script>
+  <script src="/app.js?v=7.7.0" defer></script>
 </head>
 <body>
 <div id="app">
   <aside id="sidebar" class="sidebar mobile-visible">
-    <div class="brand"><div class="brand-icon">✦</div><div><strong>TemanChat</strong><small>Terhubung dengan orang terdekat</small></div></div>
+    <div class="brand"><div class="brand-icon"><img src="/icons/temanchat-logo.png" alt="Logo TemanChat"></div><div><strong>TemanChat</strong><small>Terhubung dengan orang terdekat</small></div></div>
     <div class="mode" id="mode"><span class="dot"></span> Menghubungkan akun…</div>
     <div class="tc-theme-switch" id="themeSwitch" role="group" aria-label="Pilih tampilan TemanChat">
       <span class="tc-theme-label">Tampilan</span>
@@ -78,6 +78,17 @@
     </form>
   </main>
 </div>
+<dialog id="photoPreviewDialog" class="tc-photo-preview" aria-label="Pratinjau foto sebelum dikirim">
+ <div class="tc-photo-preview-head"><strong>Periksa foto</strong><span>Hasil yang dikirim mengikuti pratinjau</span></div>
+ <div class="tc-photo-preview-frame"><img id="photoPreviewImage" alt="Pratinjau foto yang akan dikirim"></div>
+ <div class="tc-photo-preview-actions">
+  <button type="button" id="photoMirrorToggle" aria-pressed="false">Mode Cermin: Mati</button>
+  <div class="tc-photo-preview-bottom">
+   <button type="button" id="photoPreviewCancel">Batal</button>
+   <button type="button" id="photoPreviewSend">Kirim foto</button>
+  </div>
+ </div>
+</dialog>
 <dialog id="mediaNoticeDialog" class="tc-media-notice">
  <h2>Foto pertama diterima 📷</h2>
  <p>Secara bawaan, foto dan video tidak disimpan otomatis. File transit tersedia sekitar 3 hari. Simpan media tertentu lewat menu ⋯, atau atur lokasi penyimpanan di Pengaturan.</p>
@@ -87,7 +98,7 @@
  </div>
 </dialog>
 <aside id="installBanner" class="tc-install-banner" aria-label="Pasang aplikasi TemanChat" hidden>
-  <div class="tc-install-banner-icon" aria-hidden="true">✦</div>
+  <div class="tc-install-banner-icon" aria-hidden="true"><img src="/icons/temanchat-logo.png" alt=""</div>
   <div class="tc-install-banner-copy">
     <strong>Pasang TemanChat</strong>
     <span>Lebih mudah dibuka dari Layar Utama, tanpa mencari tab browser.</span>
@@ -96,7 +107,7 @@
   <button type="button" class="tc-install-banner-close" id="installBannerDismiss" aria-label="Ingatkan nanti" title="Ingatkan nanti">×</button>
 </aside>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<dialog id="modal"><div class="modal-head"><div class="logo-large">✦</div><button class="round" id="closeModal" aria-label="Tutup"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><h2 id="modalTitle">TemanChat</h2><p id="modalDesc"></p><div id="modalContent"></div></dialog>
+<dialog id="modal"><div class="modal-head"><div class="logo-large"><img src="/icons/temanchat-logo.png" alt="Logo TemanChat"></div><button class="round" id="closeModal" aria-label="Tutup"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><h2 id="modalTitle">TemanChat</h2><p id="modalDesc"></p><div id="modalContent"></div></dialog>
 <dialog id="callDialog" class="call-dialog">
   <div class="call-screen">
     <div class="tc-call-status-pill" id="callStatusPill" role="timer" aria-live="off">Memanggil…</div>

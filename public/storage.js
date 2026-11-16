@@ -82,49 +82,27 @@ async function saveManual(blob,name){
  setTimeout(()=>URL.revokeObjectURL(url),45000);return 'unduhan';
 }
 function wifi(){const type=navigator.connection?.type;return type==='wifi'||type==='ethernet';}
-function getClientId(){return window.TEMANCHAT_CONFIG?.googleClientId?.trim()||'';}
-async function loadGIS(){
- if(window.google?.accounts?.oauth2)return;
- await new Promise((resolve,reject)=>{
-  const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.async=true;
-  s.onload=resolve;s.onerror=()=>reject(Error('Gagal memuat layanan Google.'));document.head.append(s);
- });
+function getClientId(){return 'server-oauth';} // OAuth berjalan di Worker, ID/secret tidak dikirim ke browser.
+async function driveStatus(){
+ const r=await fetch('/api/google/status',{credentials:'same-origin',cache:'no-store'});
+ const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Gagal memeriksa Google Drive.');return d;
 }
-async function connectGoogle(){
- const cid=getClientId();if(!cid)throw Error('Google Drive belum dikonfigurasi oleh pemilik TemanChat.');
- await loadGIS();
- if(googleToken&&Date.now()<googleExpires)return googleToken;
- return new Promise((resolve,reject)=>{
-  if(!googleClient)googleClient=google.accounts.oauth2.initTokenClient({
-   client_id:cid,scope:'https://www.googleapis.com/auth/drive.file',
-   callback:response=>{
-    if(response.error||!response.access_token){reject(Error('Koneksi Google dibatalkan.'));return;}
-    googleToken=response.access_token;googleExpires=Date.now()+(Number(response.expires_in||3500)-60)*1000;
-    resolve(googleToken);
-   }
-  });
-  googleClient.requestAccessToken({prompt:'consent'});
- });
+async function connectGoogle(){window.location.assign('/api/google/connect');}
+async function disconnectGoogle(){
+ const r=await fetch('/api/google/disconnect',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:'{}'});
+ const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Gagal memutus Google Drive.');return d;
 }
-async function getGoogleToken(){return googleToken&&Date.now()<googleExpires?googleToken:await connectGoogle();}
 async function uploadDrive(blob,name){
- if(!wifi())throw Error('Backup hanya saat Wi-Fi terverifikasi. Browser ini mungkin tidak bisa mendeteksi jenis jaringan.');
- const token=await getGoogleToken();
- const boundary='tc_'+Math.random().toString(36).slice(2);
- const metadata={name:'TemanChat_'+(name||'media').replace(/[^\w.-]/g,'_').slice(0,90)};
- const before=`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${blob.type||'application/octet-stream'}\r\n\r\n`;
- const payload=new Blob([before,blob,`\r\n--${boundary}--`]);
- const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size',{
-  method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':`multipart/related; boundary=${boundary}`},body:payload
- });
- if(!r.ok)throw Error('Upload ke Google Drive gagal (HTTP '+r.status+').');
- const d=await r.json();if(!d.id||Number(d.size)!==blob.size)throw Error('Ukuran backup Google Drive tidak cocok.');
- return {fileId:d.id,accessToken:token};
+ if(blob.size>20*1024*1024)throw Error('Backup via Worker saat ini maksimal 20 MB. File besar belum didukung; jangan gunakan pengiriman otomatis.');
+ const r=await fetch('/api/google/upload',{method:'POST',credentials:'same-origin',
+  headers:{'Content-Type':blob.type||'application/octet-stream','X-TC-File-Name':encodeURIComponent(name)},body:blob});
+ const d=await r.json().catch(()=>({}));
+ if(!r.ok||!d.ok)throw Error(d.error||'Upload ke Google Drive gagal.');
+ return {fileId:d.fileId,md5Checksum:d.md5Checksum};
 }
 async function downloadDrive(fileId){
- const token=await getGoogleToken();const r=await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'?alt=media',{headers:{Authorization:`Bearer ${token}`}});
- if(!r.ok)throw Error('Media tidak bisa diambil dari Drive. Hubungkan kembali akun Google.');
- return r.blob();
+ const r=await fetch('/api/google/download/'+encodeURIComponent(fileId),{credentials:'same-origin',cache:'no-store'});
+ if(!r.ok)throw Error('File tidak bisa diambil dari Google Drive yang terhubung.');return r.blob();
 }
-window.TCStorage={put,get,verified,cleanup,pref,setPref,wifi,getClientId,connectGoogle,uploadDrive,downloadDrive,supportsFolder,chooseFolder,autoSaveFolder,saveManual};
+window.TCStorage={put,get,verified,cleanup,pref,setPref,wifi,getClientId,driveStatus,connectGoogle,disconnectGoogle,uploadDrive,downloadDrive,supportsFolder,chooseFolder,autoSaveFolder,saveManual};
 })();

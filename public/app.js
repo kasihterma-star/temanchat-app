@@ -439,7 +439,7 @@ async function openMedia(messageId,m,area){
     drive.disabled=true;
     try{const b=await TCS.uploadDrive(blob,fileName);
       // Backup Drive milik penerima tidak menghapus R2 secara prematur.
-      if(m.sender_id!==me.id){await post('/api/media/confirm',{messageId,storageType:'google_drive',driveFileId:b.fileId,accessToken:b.accessToken});}
+      if(m.sender_id!==me.id){await post('/api/media/confirm',{messageId,storageType:'google_drive',driveFileId:b.fileId});}
       await TCS.verified(me.id,messageId);toast('Salinan Google Drive terverifikasi.');
     }catch(e){toast(e.message)}finally{drive.disabled=false}
    };actions.append(drive);
@@ -449,10 +449,19 @@ async function openMedia(messageId,m,area){
     if(TCS.supportsFolder())await TCS.autoSaveFolder(blob,fileName);
    }catch(e){console.warn('Penyimpanan otomatis lokal:',e.message)}
   }
-  if(TCS.pref()==='google_drive'&&TCS.getClientId()&&TCS.wifi()){
-   // Hanya jika token Google sudah pernah diizinkan dalam sesi browser ini.
-   // Jangan meminta login Google otomatis ketika membuka media.
-   console.info('Backup Google Drive: gunakan tombol Simpan ke Google Drive untuk memberi izin.');
+  if(TCS.pref()==='google_drive'&&TCS.wifi()&&m.sender_id!==me.id){
+   try{
+    const status=await TCS.driveStatus();
+    if(status.connected){
+      const oldBackup=await api('/api/media/backup?messageId='+encodeURIComponent(messageId));
+      if(!oldBackup?.backup){
+        const saved=await TCS.uploadDrive(blob,fileName);
+        await post('/api/media/confirm',{messageId,storageType:'google_drive',driveFileId:saved.fileId});
+        await TCS.verified(me.id,messageId);
+        toast('Media berhasil dicadangkan ke Google Drive pribadi.');
+      }
+    }
+   }catch(e){console.warn('Backup Google Drive belum selesai:',e.message);toast('Backup Drive belum berhasil: '+e.message)}
   }
  }catch(e){toast(e.message)}
 }
@@ -603,14 +612,64 @@ $('messageForm').addEventListener('submit',async e=>{
  try{const d=await post('/api/chat/send',{conversationId:id,body:msg,replyToId:replyTarget?.id||null});input.value='';clearReply();stopTyping();if(active?.id===id){if($('messages').querySelector('.day'))$('messages').replaceChildren();addMessage({...d.message,delivery_status:'sent'})}await fetchChats();}
  catch(e){toast(e.message)}finally{sendBtn.disabled=!active;if(active?.id===id&&!document.hidden){try{input.focus({preventScroll:true})}catch{input.focus()}}}
 });
+// V7.6: semua foto dapat diperiksa sebelum dikirim. Normal adalah bawaan;
+// mode Cermin hanya dilakukan jika pengguna menekannya (kamera iPhone tidak
+// memberikan informasi tepercaya apakah foto depan sudah dicerminkan).
+async function previewPhotoBeforeSend(file){
+ if(!file.type.startsWith('image/')||file.type==='image/gif')return file;
+ const dialog=$('photoPreviewDialog'),img=$('photoPreviewImage');
+ const flip=$('photoMirrorToggle'),confirm=$('photoPreviewSend'),cancel=$('photoPreviewCancel');
+ if(!dialog||!img||typeof dialog.showModal!=='function')return file;
+ const url=URL.createObjectURL(file);let mirrored=false;
+ img.src=url;img.style.transform='none';flip.setAttribute('aria-pressed','false');
+ flip.textContent='Mode Cermin: Mati';
+ return new Promise(resolve=>{
+  let settled=false;
+  function finish(value){
+   if(settled)return;settled=true;
+   flip.removeEventListener('click',toggle);confirm.removeEventListener('click',send);
+   cancel.removeEventListener('click',abort);dialog.removeEventListener('cancel',onCancel);
+   if(dialog.open)dialog.close();img.removeAttribute('src');URL.revokeObjectURL(url);
+   resolve(value);
+  }
+  function toggle(){mirrored=!mirrored;img.style.transform=mirrored?'scaleX(-1)':'none';
+   flip.setAttribute('aria-pressed',String(mirrored));
+   flip.textContent=mirrored?'Mode Cermin: Aktif':'Mode Cermin: Mati';}
+  async function send(){
+   if(!mirrored)return finish(file);
+   confirm.disabled=true;
+   try{
+    if(!img.complete)await img.decode();
+    const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+    const ctx=canvas.getContext('2d');if(!ctx)throw Error('Perangkat tidak mendukung pengolahan foto');
+    ctx.translate(canvas.width,0);ctx.scale(-1,1);ctx.drawImage(img,0,0);
+    const outputType=file.type==='image/png'?'image/png':'image/jpeg';
+    const blob=await new Promise(r=>canvas.toBlob(r,outputType,.93));
+    canvas.width=canvas.height=0;
+    if(!blob)throw Error('Tidak dapat memproses mode cermin');
+    const ext=outputType==='image/png'?'png':'jpg';
+    const base=(file.name||'TemanChat-foto').replace(/\.[^.]+$/,'');
+    finish(new File([blob],base+'-cermin.'+ext,{type:outputType,lastModified:Date.now()}));
+   }catch(err){toast(err.message||'Mode cermin gagal');confirm.disabled=false;}
+  }
+  function abort(){finish(null)}
+  function onCancel(e){e.preventDefault();abort()}
+  flip.addEventListener('click',toggle);confirm.addEventListener('click',send);
+  cancel.addEventListener('click',abort);dialog.addEventListener('cancel',onCancel);
+  confirm.disabled=false;dialog.showModal();
+ });
+}
 $('attachmentInput').addEventListener('change',async()=>{
- const file=$('attachmentInput').files[0],id=active?.id;
- $('attachmentInput').value='';if(!file||!id)return;
+ const original=$('attachmentInput').files[0],id=active?.id;
+ $('attachmentInput').value='';if(!original||!id)return;
  try{
+  const file=await previewPhotoBeforeSend(original);
+  if(!file)return; // Batal tidak pernah mengunggah ke R2.
+  if(active?.id!==id){toast('Percakapan sudah berubah. Coba pilih file lagi.');return;}
   toast('Mengunggah media…');
   const result=await uploadMediaFile(file,id,replyTarget?.id||null);
   if(active?.id===id){clearReply();if($('messages').querySelector('.day'))$('messages').replaceChildren();addMessage(result.message)}
-  toast('Media terkirim. File asli perangkat tidak dihapus.');await fetchChats();
+  toast('Media terkirim. Foto asli perangkat tidak diubah.');await fetchChats();
  }catch(e){toast(e.message)}
 });
 // V7.4 pesan suara: tahan > geser atas untuk kunci; lepaskan untuk kirim;
@@ -838,14 +897,14 @@ $('settingsBtn').onclick=()=>{
  section.append(guideTitle,element('p','','Bawaan: tidak simpan otomatis. Foto/video sementara dapat kedaluwarsa setelah sekitar 3 hari. Pilih menu ⋯ pada media untuk menyimpan file tertentu. Cache sementara bukan galeri perangkat; file asli di galeri tidak dihapus.'));
  wrap.append(section);
  const select=element('select');
- for(const [v,t] of [['none','Tidak simpan otomatis (bawaan)'],['local','Simpan ke perangkat / folder pilihan'],['google_drive','Google Drive pribadi (perlu OAuth)'],['nextcloud','Nextcloud / CasaOS (belum aktif)']]){
+ for(const [v,t] of [['none','Tidak simpan otomatis (bawaan)'],['local','Simpan ke perangkat / folder pilihan'],['google_drive','Google Drive pribadi (akun terhubung)'],['nextcloud','Nextcloud / CasaOS (belum aktif)']]){
   const option=element('option','',t);option.value=v;select.append(option);
  }
  select.value=mediaPrefs.mode;
  select.onchange=async()=>{
   const mode=select.value;
   if(mode==='nextcloud'){select.value=mediaPrefs.mode;toast('Integrasi Nextcloud belum diaktifkan, pengaturan tidak diubah.');return;}
-  if(mode==='google_drive'&&!TCS.getClientId()){select.value=mediaPrefs.mode;toast('OAuth Google Drive belum dikonfigurasi. Mode tidak diubah.');return;}
+  if(mode==='google_drive'){try{const d=await TCS.driveStatus();if(!d.connected){select.value=mediaPrefs.mode;toast('Hubungkan Google Drive dahulu.');return;}}catch(e){select.value=mediaPrefs.mode;toast(e.message);return;}}
   select.disabled=true;
   try{await updateMediaPrefs({mode});toast('Pilihan penyimpanan disimpan di akun.');}
   catch(e){select.value=mediaPrefs.mode;toast(e.message)}finally{select.disabled=false}
@@ -856,9 +915,19 @@ $('settingsBtn').onclick=()=>{
   choose.onclick=async()=>{try{const name=await TCS.chooseFolder();toast('Folder '+name+' dipilih. Izin dapat perlu diperbarui.')}catch(e){if(e.name!=='AbortError')toast(e.message)}};
   wrap.append(choose);
  }else wrap.append(element('small','','Perangkat ini tidak mendukung penyimpanan otomatis ke folder tertentu. Simpan file manual melalui menu ⋯ pada media.'));
- if(TCS.getClientId()){
-  const connect=element('button','primary','Hubungkan Google Drive');connect.onclick=async()=>{try{await TCS.connectGoogle();toast('Google Drive terhubung untuk sesi browser ini.')}catch(e){toast(e.message)}};wrap.append(connect);
- }else wrap.append(element('small','','Google Drive belum diaktifkan (OAuth Client ID belum tersedia). Belum ada backup cloud otomatis.'));
+ const driveGroup=element('div','tc-drive-connect');
+ driveGroup.append(element('b','','Google Drive pribadi'),element('small','','Akses drive.file: hanya file yang dibuat/dipilih melalui TemanChat. Token disimpan terenkripsi di server; tidak dibagikan ke teman.'));
+ const driveState=element('small','','Memeriksa koneksi Drive…');
+ const connect=element('button','primary','Hubungkan Google Drive');
+ const disconnect=element('button','tc-media-action','Putuskan Google Drive');
+ const refreshDrive=async()=>{
+  try{const d=await TCS.driveStatus();driveState.textContent=d.connected?'✓ Google Drive sudah terhubung':'Google Drive belum terhubung';connect.hidden=!!d.connected;disconnect.hidden=!d.connected;}
+  catch(e){driveState.textContent='Tidak dapat memeriksa koneksi: '+e.message;disconnect.hidden=true;}
+ };
+ connect.onclick=()=>TCS.connectGoogle();
+ disconnect.onclick=async()=>{if(!confirm('Putuskan Google Drive dari TemanChat? File yang sudah ada di Drive tidak dihapus.'))return;disconnect.disabled=true;try{await TCS.disconnectGoogle();await refreshDrive();toast('Koneksi Google Drive diputus.');}catch(e){toast(e.message)}finally{disconnect.disabled=false}};
+ driveGroup.append(driveState,connect,disconnect);
+ wrap.append(driveGroup);void refreshDrive();
  wrap.append(element('small','','Simpan permanen ke Nextcloud memerlukan konektor server tambahan. Tidak dianggap sudah tersimpan sebelum konektor benar-benar tersedia.'));
  const notifyButton=element('button','primary','Memeriksa notifikasi…');
  const showPushState=async()=>{
@@ -1185,3 +1254,6 @@ if(window.matchMedia){
  });
 }
 init();
+
+// OAuth kembali dari Google setelah pengguna memberi izin.
+try{const q=new URL(location.href).searchParams.get('drive');if(q){history.replaceState(null,'',location.pathname);setTimeout(()=>{const dict={connected:'Google Drive berhasil terhubung. Buka Pengaturan untuk melihat status.',failed:'Koneksi Google Drive gagal. Coba lagi dari Pengaturan.',cancelled:'Koneksi Google Drive dibatalkan.',expired:'Sesi izin Google kedaluwarsa. Ulangi.',login:'Silakan login ke TemanChat lagi.',scope:'Izin Drive belum diberikan.',invalid:'Respons Google tidak valid.'};toast(dict[q]||'Status Drive: '+q)},800)}}catch{}
