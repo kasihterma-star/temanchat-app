@@ -62,15 +62,16 @@ async function notifyLocal(title,body,tag){
 let serverPushEnabled=false,serverPushEndpoint='';
 const NOTIFY_PREF='tc_notifications_enabled';
 const notificationsEnabled=()=>localStorage.getItem(NOTIFY_PREF)!=='off';
-const NOTIFY_MODE_KEY='tc_notification_mode_v78';
+const NOTIFY_MODE_KEY='tc_notification_mode_v78'; // tetap memakai preferensi versi terdahulu
 const notificationMode=()=>{
  const mode=localStorage.getItem(NOTIFY_MODE_KEY)||'both';
  return ['both','sound','vibrate','silent'].includes(mode)?mode:'both';
 };
 const notificationStyle=mode=>({
- silent:mode==='silent'||mode==='vibrate',
- // Opsi vibrate hanya bersifat best-effort: OS/browser dapat mengabaikannya.
- ...(mode==='both'?{vibrate:[180,90,180]}:{})
+ // silent:true tidak boleh digabung dengan vibrate pada Notifications API.
+ // Getar saja adalah permintaan tanpa suara dari aplikasi, tetapi OS yang mengatur bunyi channel.
+ silent:mode==='silent',
+ ...(['both','vibrate'].includes(mode)?{vibrate:[180,90,180]}:{})
 });
 const soundAllowed=()=>['both','sound'].includes(notificationMode());
 const vibrationAllowed=()=>notificationsEnabled()&&['both','vibrate'].includes(notificationMode());
@@ -957,7 +958,7 @@ $('settingsBtn').onclick=()=>{
   const option=element('option','',label);option.value=value;modeSelect.append(option);
  }
  modeSelect.value=notificationMode();modeSelect.setAttribute('aria-label','Mode suara dan getar notifikasi');
- const modeHelp=element('small','','Pengaturan suara dan getar notifikasi sistem tetap ditentukan Android/iOS. Getar dari PWA tidak dijamin pada semua perangkat.');
+ const modeHelp=element('small','','Android/Chrome menentukan suara dan getar push melalui kanal notifikasi sistem. Mode Getar saja meminta pola getar, tetapi tidak bisa memaksa HP senyap. Periksa Pengaturan Android → Aplikasi → TemanChat/Chrome → Notifikasi → Getar.');
  modeSelect.onchange=()=>{localStorage.setItem(NOTIFY_MODE_KEY,modeSelect.value);syncNotificationModeWorker();
    if(!audioPreference())stopCallTone();toast('Mode notifikasi disimpan di perangkat ini.');
    toneButton.textContent=audioPreference()?'Suara panggilan: Aktif':'Suara panggilan: Nonaktif';
@@ -1003,9 +1004,11 @@ $('settingsBtn').onclick=()=>{
   if(!notificationsEnabled())return toast('Notifikasi sedang OFF.');
   if(!vibrationAllowed())return toast('Pilih Suara + Getar atau Getar saja terlebih dahulu.');
   if(typeof navigator.vibrate!=='function')return toast('Browser/perangkat ini tidak mendukung getaran dari website.');
-  const ok=navigator.vibrate([160,100,220]);toast(ok?'Perintah getar dikirim.':'Perangkat menolak perintah getar.');
+  const ok=navigator.vibrate([180,120,270,120,180]);toast(ok?'Perintah getar diterima browser (belum menjamin motor HP bergetar). Cek pengaturan getar Android.':'Perangkat/browser menolak perintah getar.');
  };
  wrap.append(vibrateTest);
+ const androidInfo=element('small','','Status aplikasi: '+(runningAsApp()?'PWA terpasang / standalone':'Dibuka di tab browser')+'. Tombol Back sistem Android mengikuti riwayat halaman dan kebijakan Android/Chrome; website tidak dapat memaksa langsung ke Home HP. Tombol kembali TemanChat tetap menuju daftar chat.');
+ wrap.append(androidInfo);
  if(!runningAsApp()){const install=element('button','primary','Instal TemanChat');install.onclick=()=>{$('modal').close();void triggerTemanChatInstall()};wrap.append(install);}
  const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{
    try{
@@ -1256,7 +1259,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.8'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.9'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
@@ -1288,7 +1291,7 @@ if('serviceWorker' in navigator){
  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').then(syncNotificationModeWorker).catch(console.warn));
  navigator.serviceWorker.addEventListener('controllerchange',syncNotificationModeWorker);
 }
-// V7.8: tidak menambahkan pushState atau intercept popstate. Tombol Kembali
+// V7.9: tidak menambahkan pushState atau intercept popstate. Tombol Kembali
 // bawaan Android tetap milik browser/OS, bukan dipaksa kembali ke daftar chat.
 // Tombol Kembali internal (#backBtn), tombol tutup dialog, tetap bekerja bertahap.
 // Mode tema dapat langsung diubah tanpa masuk ke Pengaturan.

@@ -1,6 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-const CACHE='temanchat-v78-notify-navigation';
-const ASSETS=['/style.css?v=7.8.0','/v6.css?v=7.8.0','/app.js?v=7.8.0','/storage.js?v=7.8.0','/config.js?v=7.8.0','/auth.css?v=7.8.0','/auth.js?v=7.8.0','/confirm-email.js?v=7.8.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
+const CACHE='temanchat-v79-notify-navigation';
+const ASSETS=['/style.css?v=7.9.0','/v6.css?v=7.9.0','/app.js?v=7.9.0','/storage.js?v=7.9.0','/config.js?v=7.9.0','/auth.css?v=7.9.0','/auth.js?v=7.9.0','/confirm-email.js?v=7.9.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
@@ -65,8 +65,9 @@ self.addEventListener('push',event=>{
   tasks.push(self.registration.showNotification(String(d.title||'TemanChat').slice(0,90),{
    body:String(d.body||'Ada aktivitas baru').slice(0,180),icon:'/icons/icon-192.png',
    badge:'/icons/icon-192.png',tag:String(d.tag||'tc-event'),data:{url:safeUrl},renotify:true,
-   silent:notificationMode==='silent'||notificationMode==='vibrate',
-   ...(notificationMode==='both'?{vibrate:[180,90,180]}:{})
+   // Jangan pakai silent:true bersama vibrate; kombinasi tersebut tidak valid.
+   silent:notificationMode==='silent',
+   ...(['both','vibrate'].includes(notificationMode)?{vibrate:[180,90,180]}:{})
   }));
   await Promise.allSettled(tasks);
  })());
