@@ -1,0 +1,8 @@
+TemanChat V7.6 REBUILD BERSIH
+Sumber: ZIP V7.5 dari pengguna.
+1. Backup folder Documents\GitHub\temanchat-app.
+2. Ekstrak ZIP ini, salin SELURUH ISINYA ke folder repo, pilih Replace.
+3. Commit dan Push via GitHub Desktop.
+4. Periksa Cloudflare Ready.
+5. Pastikan tulisan <<<<<<< HEAD tidak muncul pada halaman.
+6. Uji pratinjau foto, tombol Normal/Cermin dan Balas pada iPhone.

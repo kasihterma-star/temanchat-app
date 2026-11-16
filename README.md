@@ -1,3 +1,28 @@
+# TemanChat V7.6 — Rebuild bersih dari V7.5
+
+Sumber: ZIP V7.5 yang diunggah pengguna. Versi ini tidak memakai file repository GitHub yang sempat mengandung konflik merge.
+
+## Yang berubah dari V7.5
+
+- Foto memiliki pratinjau sebelum dikirim dengan tombol **Mode Cermin: Mati/Aktif**. Bawaan Normal, sehingga foto kamera atau galeri tidak dibalik tanpa pilihan pengguna.
+- Tindakan **Batal** tidak mengunggah media.
+- Tampilan kutipan dan menu **Balas** di HP dibatasi supaya tidak keluar dari layar.
+- File cache PWA dinaikkan ke V7.6.
+- Fitur lain termasuk R2, chat, suara, panggilan, dan notifikasi tetap mengikuti V7.5.
+
+## Pemasangan aman
+
+1. Cadangkan folder proyek `Documents\GitHub\temanchat-app`.
+2. Ekstrak ZIP ini. **Salin isi ZIP** (bukan folder ZIP) ke dalam folder repository, pilih Replace.
+3. Jangan memakai menu merge GitHub untuk menggabungkan file yang konflik.
+4. Pastikan `package.json` dan `public/index.html` di repository tidak mengandung `<<<<<<<`, `=======`, atau `>>>>>>>`. Bila file tersebut sudah rusak, ganti dari paket ini.
+5. GitHub Desktop: Commit ke main, lalu Push origin.
+6. Periksa build Cloudflare sampai Ready. Jika gagal, baca Build logs.
+7. Refresh browser atau buka ulang PWA, uji foto dengan pratinjau dan menu Balas.
+
+R2 menggunakan binding `MEDIA` dan D1 menggunakan `DB`; jangan menghapus binding atau secret yang sudah ada.
+
+Catatan: tidak ada perubahan schema database untuk fitur pratinjau foto ini. Penggunaan kamera bawaan iPhone tidak selalu mengungkap preferensi mirror, sehingga aplikasi menyediakan pilihan mirror manual.
 # TemanChat V7.5 FULL — Smart Notification, Swipe Reply, Voice Glass
 
 Paket lengkap penerus TemanChat V7.4. Desain **Glass Monokrom** dan seluruh fitur lama (akun, status online, R2, Web Push, centang, media, panggilan, foto profil, dan rekam suara) dipertahankan.
@@ -8,11 +33,7 @@ Paket lengkap penerus TemanChat V7.4. Desain **Glass Monokrom** dan seluruh fitu
 2. **Notifikasi OFF dari Pengaturan.** Mematikan semua notifikasi membatalkan langganan Web Push di perangkat tersebut dan menghentikan bunyi panggilan serta notifikasi lokal. Notifikasi OFF **tidak mematikan chat, panggilan, atau angka belum dibaca di dalam aplikasi**. UI panggilan masuk saat TemanChat terbuka tetap bisa ditampilkan tanpa suara. Pilihan OFF tersimpan di perangkat dan ON bisa mengaktifkan kembali dengan izin notifikasi perangkat. Preferensi OFF **berlaku per instalasi/perangkat**, bukan semua perangkat pengguna sekaligus.
 3. **Balas dengan geser.** Pada layar sentuh, geser bubble ke kanan sekitar **62 px**. Bubble mengikuti jari dan menampilkan tanda ↩ Balas. Geser ke atas/bawah tetap dipakai untuk menggulir chat. Di komputer tetap tersedia menu **⋯ → Balas pesan**. Kutipan balasan tetap tersimpan di D1 sebagaimana V7.4.
 4. **Perekam pesan suara lebih modern.** Panel kaca dengan timer, garis gelombang animasi (dekoratif), petunjuk geser, tombol Batal/Jeda/Kirim; tombol mikrofon diganti ikon SVG yang konsisten. Setelah pesan suara dibuka, pemutar memiliki kecepatan **1× / 1,5× / 2×** dan kontrol audio bawaan perangkat. Fungsi tahan-lepas, geser atas untuk mengunci, geser kiri untuk batal tetap tersedia.
-<<<<<<< HEAD
-5. **Cache PWA baru** `temanchat-v76-photo-reply` dan aset `7.6.0` supaya browser memuat kode baru.
-=======
 5. **Cache PWA baru** `temanchat-v75-smart-voice` dan aset `7.5.0` supaya browser memuat kode baru.
->>>>>>> ab2fb14b2bbe2c86d1fd2149a08eecedb51f74f3
 
 ## Cara pasang (GitHub Desktop)
 
@@ -38,10 +59,3 @@ Tidak perlu mengubah kunci VAPID, bucket R2, binding `MEDIA`, ataupun membuat ta
 - Suara notifikasi/panggilan saat aplikasi tertutup tetap tunduk pada aturan iOS/Android dan setelan suara sistem. OFF memutus langganan aplikasi; notifikasi yang sudah antre di layanan push mungkin masih dapat muncul sesaat ketika perubahan diterapkan.
 - Pengujian lokal telah mencakup `npm run check`, pemeriksaan otorisasi endpoint fokus, simulasi browser ukuran 390 px dan 1280 px, swipe balas, tampilan perekam, serta aturan mute pesan A/pesan B/panggilan. **Belum diuji langsung di Cloudflare dan iPhone pengguna.**
 - Pengiriman file besar melalui Google Drive, backup Nextcloud otomatis, dan notifikasi panggilan bergaya native tetap memiliki batasan integrasi sebagaimana pada V7.4.
-<<<<<<< HEAD
-
-
-## TemanChat V7.6
-Pratinjau foto sebelum kirim dengan pilihan Mode Cermin (opsional, bukan deteksi otomatis kamera), plus batas tampilan menu Balas pada HP. Lihat PANDUAN-V7.6.txt.
-=======
->>>>>>> ab2fb14b2bbe2c86d1fd2149a08eecedb51f74f3

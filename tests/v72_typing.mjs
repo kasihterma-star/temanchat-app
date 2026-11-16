@@ -17,12 +17,7 @@ assert.match(app,/addEventListener\('blur',stopTyping\)/);
 assert.match(app,/visibilitychange/);
 assert.match(app,/typingPollTimer=setInterval/);
 assert.match(html,/id="typingIndicator"/);
-<<<<<<< HEAD
 assert.match(html,/v=7\.6\.0/);
 assert.match(sw,/temanchat-v76-photo-reply/);
-=======
-assert.match(html,/v=7\.5\.0/);
-assert.match(sw,/temanchat-v75-smart-voice/);
->>>>>>> ab2fb14b2bbe2c86d1fd2149a08eecedb51f74f3
 assert.match(css,/\.tc-typing-indicator\[hidden\]/);
 console.log('PASS V7.2: auth guard, TTL, endpoints, input lifecycle, UI and cache.');

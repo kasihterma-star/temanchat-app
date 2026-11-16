@@ -651,13 +651,8 @@ async function previewPhotoBeforeSend(file){
  });
 }
 $('attachmentInput').addEventListener('change',async()=>{
-<<<<<<< HEAD
  const original=$('attachmentInput').files[0],id=active?.id;
  $('attachmentInput').value='';if(!original||!id)return;
-=======
- const file=$('attachmentInput').files[0],id=active?.id;
- $('attachmentInput').value='';if(!file||!id)return;
->>>>>>> ab2fb14b2bbe2c86d1fd2149a08eecedb51f74f3
  try{
   const file=await previewPhotoBeforeSend(original);
   if(!file)return; // Batal tidak pernah mengunggah ke R2.
@@ -665,11 +660,7 @@ $('attachmentInput').addEventListener('change',async()=>{
   toast('Mengunggah media…');
   const result=await uploadMediaFile(file,id,replyTarget?.id||null);
   if(active?.id===id){clearReply();if($('messages').querySelector('.day'))$('messages').replaceChildren();addMessage(result.message)}
-<<<<<<< HEAD
   toast('Media terkirim. Foto asli perangkat tidak diubah.');await fetchChats();
-=======
-  toast('Media terkirim. File asli perangkat tidak dihapus.');await fetchChats();
->>>>>>> ab2fb14b2bbe2c86d1fd2149a08eecedb51f74f3
  }catch(e){toast(e.message)}
 });
 // V7.4 pesan suara: tahan > geser atas untuk kunci; lepaskan untuk kirim;

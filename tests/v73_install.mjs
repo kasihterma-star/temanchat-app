@@ -5,10 +5,6 @@ for(const term of ['runningAsApp','navigator.standalone','display-mode: standalo
 assert.ok(js.includes("$('installBtn').hidden=installed"));
 assert.ok(js.includes('setTimeout(refreshInstallOffer,1300)'));
 assert.ok(css.includes('.tc-install-banner'));
-<<<<<<< HEAD
 assert.ok(sw.includes('temanchat-v76-photo-reply'));
-=======
-assert.ok(sw.includes('temanchat-v75-smart-voice'));
->>>>>>> ab2fb14b2bbe2c86d1fd2149a08eecedb51f74f3
 assert.ok(!html.includes('v=7.2.0'));
 console.log('V7.3 install controls OK');
