@@ -1,0 +1,12 @@
+TemanChat V8.2 — PERBAIKAN SANDI DAN PERFORMA
+
+1. Pesan sandi salah kini muncul merah tepat di bawah kolom sandi, dialog tetap terbuka.
+2. Polling tidak bertumpuk bila jaringan lambat.
+3. Saat aplikasi tersembunyi, render/polling chat tidak dijalankan; Web Push tetap bekerja melalui SW.
+4. Polling status mengetik 3 detik dan hanya saat ada chat yang terbuka.
+5. Aset statis berversi dibaca dari cache PWA untuk mengurangi jaringan; API pribadi tetap tidak dicache.
+6. Tidak mengubah endpoint autentikasi, D1 schema, R2, Drive, panggilan atau UI utama.
+
+Instal: backup folder proyek, ekstrak ZIP ke folder GitHub temanchat-app, ganti file, commit dan push, tunggu Cloudflare Ready, tutup/buka PWA.
+
+PENTING: tes manual pada dua perangkat tetap diperlukan. Pada Android background push tetap bergantung OS/browser.

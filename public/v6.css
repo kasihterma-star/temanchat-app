@@ -518,3 +518,7 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 .tc-device-confirm input{width:100%;min-height:42px;border-radius:10px;padding:8px 12px}
 .tc-device-actions{display:flex;flex-wrap:wrap;gap:8px}
 .tc-device-actions button{flex:1;min-width:120px}
+
+/* V8.2: pesan kesalahan sandi terlihat di dalam dialog perangkat. */
+.tc-device-error:not([hidden]){display:block;color:#dc3545;font-weight:600;margin:.4rem 0;line-height:1.4}
+.tc-device-confirm input[aria-invalid="true"]{outline:2px solid #dc3545;outline-offset:1px}

@@ -1041,16 +1041,24 @@ $('settingsBtn').onclick=()=>{
          const confirm=element('button','primary','Konfirmasi keluarkan');
          const cancel=element('button','tc-media-action','Batal');
          const controls=element('div','tc-device-actions');controls.append(confirm,cancel);
-         authBox.append(element('small','','Perangkat ini akan keluar dan harus login ulang.'),pass,controls);
-         kick.onclick=()=>{authBox.hidden=false;kick.hidden=true;pass.focus()};
-         cancel.onclick=()=>{pass.value='';authBox.hidden=true;kick.hidden=false};
+         // Pesan kesalahan harus terlihat DI DALAM dialog, bukan toast di belakang modal.
+         const passError=element('small','tc-device-error','');
+         passError.hidden=true;passError.setAttribute('role','alert');passError.setAttribute('aria-live','polite');
+         const showPassError=message=>{passError.textContent=message;passError.hidden=!message;pass.setAttribute('aria-invalid',String(!!message));};
+         pass.addEventListener('input',()=>showPassError(''));
+         authBox.append(element('small','','Perangkat ini akan keluar dan harus login ulang.'),pass,passError,controls);
+         kick.onclick=()=>{showPassError('');authBox.hidden=false;kick.hidden=true;pass.focus()};
+         cancel.onclick=()=>{pass.value='';showPassError('');authBox.hidden=true;kick.hidden=false};
          confirm.onclick=async()=>{
-           if(pass.value.length<8)return toast('Masukkan sandi akun TemanChat.');
-           confirm.disabled=true;
+           if(pass.value.length<8){showPassError('Masukkan sandi akun TemanChat (minimal 8 karakter).');pass.focus();return;}
+           showPassError('');confirm.disabled=true;
            try{
              const result=await post('/api/auth/devices/revoke',{sessionId:session.id,password:pass.value});
              pass.value='';toast(result.message||'Perangkat berhasil dikeluarkan.');await loadDeviceSessions();
-           }catch(e){pass.value='';toast(e.message)}finally{confirm.disabled=false}
+           }catch(e){
+             // Sandi salah tidak boleh menutup dialog ataupun mencabut sesi.
+             showPassError(e.message||'Gagal memverifikasi sandi.');pass.select();
+           }finally{confirm.disabled=false}
          };
          item.append(kick,authBox);
        }
@@ -1309,14 +1317,29 @@ async function checkMissedCalls(){
     lastKnownCallId=incoming[0]?.id||null;callHistoryReady=true;
   }catch(e){console.warn('Call history polling',e.message)}
 }
+// Satu siklus polling aktif dalam satu waktu: respons jaringan lambat tidak
+// boleh membuat siklus 4 detik berikutnya bertumpuk dan membebani HP/server.
+let tickBusy=false;
 async function tick(){
- if(!me)return;
- if(!document.hidden){void heartbeatPresence();updateNotificationFocus();}
- if(Date.now()-lastHistoryCheck>20000){lastHistoryCheck=Date.now();await checkMissedCalls();}
- if(document.hidden){if(Date.now()-lastListUpdate>8000){lastListUpdate=Date.now();await fetchChats();}return;}
- if(currentCall)await pollCall();else await checkIncoming();
- if(active)await fetchMessages();
- if(Date.now()-lastListUpdate>8000){lastListUpdate=Date.now();await fetchChats()}
+ if(!me||tickBusy)return;
+ tickBusy=true;
+ try{
+  const now=Date.now();
+  if(!document.hidden){void heartbeatPresence();updateNotificationFocus();}
+  // Riwayat tetap dicocokkan saat tersembunyi, tetapi tidak setiap 4 detik.
+  if(now-lastHistoryCheck>(document.hidden?60000:20000)){
+   lastHistoryCheck=now;await checkMissedCalls();
+  }
+  if(document.hidden){
+   // Pertahankan signaling saat ada panggilan aktif; saat tidak ada panggilan,
+   // notifikasi masuk tetap menjadi tugas Web Push (tanpa polling chat).
+   if(currentCall)await pollCall();
+   return;
+  }
+  if(currentCall)await pollCall();else await checkIncoming();
+  if(active)await fetchMessages();
+  if(now-lastListUpdate>8000){lastListUpdate=now;await fetchChats()}
+ }finally{tickBusy=false}
 }
 async function init(){
  updateHeader(null);placeholder('Memeriksa sesi login…');if(innerWidth<=740)showList();
@@ -1325,7 +1348,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.1'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.2'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
@@ -1341,7 +1364,7 @@ async function init(){
   try{const m=await api('/api/media/config');mediaEnabled=!!m.enabled}catch{mediaEnabled=false}
   TCS.cleanup();
   await checkMissedCalls();pollTimer=setInterval(tick,4000);
-  typingPollTimer=setInterval(()=>{void refreshPartnerTyping()},2200);
+  typingPollTimer=setInterval(()=>{if(!document.hidden&&active)void refreshPartnerTyping()},3000);
   await checkIncoming();
  }catch(e){console.error('TemanChat init:',e);if(e.message!=='Sesi berakhir')toast('Tidak bisa memuat akun. Periksa koneksi lalu muat ulang.');}
 }

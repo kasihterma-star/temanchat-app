@@ -1,6 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-const CACHE='temanchat-v81-devices';
-const ASSETS=['/style.css?v=8.1.0','/v6.css?v=8.1.0','/app.js?v=8.1.0','/storage.js?v=8.1.0','/config.js?v=8.1.0','/auth.css?v=8.1.0','/auth.js?v=8.1.0','/confirm-email.js?v=8.1.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
+const CACHE='temanchat-v82-performance';
+const ASSETS=['/style.css?v=8.2.0','/v6.css?v=8.2.0','/app.js?v=8.2.0','/storage.js?v=8.2.0','/config.js?v=8.2.0','/auth.css?v=8.2.0','/auth.js?v=8.2.0','/confirm-email.js?v=8.2.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
@@ -11,10 +11,19 @@ self.addEventListener('fetch',event=>{
  const request=event.request,url=new URL(request.url);
  if(request.method!=='GET'||url.origin!==location.origin)return;
  if(url.pathname.startsWith('/api/')||url.pathname==='/'||url.pathname.endsWith('.html'))return;
- event.respondWith(fetch(request).then(r=>{
-  if(r.ok&&r.type==='basic'){const copy=r.clone();event.waitUntil(caches.open(CACHE).then(c=>c.put(request,copy)));}
-  return r;
- }).catch(()=>caches.match(request)));
+ // Hanya aset statis dalam daftar versi yang boleh cache-first.
+ // API, halaman login, dan foto pribadi tidak pernah disimpan di cache ini.
+ const staticAsset=ASSETS.includes(url.pathname+url.search)||ASSETS.includes(url.pathname);
+ event.respondWith((async()=>{
+  if(staticAsset){const cached=await caches.match(request);if(cached)return cached;}
+  try{
+   const response=await fetch(request);
+   if(staticAsset&&response.ok&&response.type==='basic'){
+    const copy=response.clone();event.waitUntil(caches.open(CACHE).then(cache=>cache.put(request,copy)));
+   }
+   return response;
+  }catch(error){const cached=await caches.match(request);if(cached)return cached;throw error;}
+ })());
 });
 
 // Simpan preferensi per-perangkat secara terpisah dari localStorage halaman.
