@@ -847,6 +847,73 @@ async function showCallHistory(){
   }catch(e){box.replaceChildren(element('p','tc-hint','Riwayat belum bisa dimuat: '+e.message))}
 }
 $('callHistoryBtn').onclick=showCallHistory;
+// V9.0 Panel Admin terpisah: daftar dan pencarian izin langsung berbasis server.
+const adminEntry=$('adminPanelBtn');
+async function openAdminPanel(){
+ if(!me?.is_admin){toast('Hanya administrator yang dapat membuka panel ini.');return}
+ modal('Panel Admin TemanChat','@'+me.username+' · Admin Utama · Akses jarak jauh aktif tanpa batas');
+ const root=$('modalContent');
+ const wrap=element('div','tc-admin-panel');
+ const info=element('div','tc-admin-summary','Akun admin memiliki izin panggilan jarak jauh permanen. Izin pengguna lain dapat disetujui langsung tanpa pengajuan.');
+ const search=element('input');search.type='search';search.placeholder='Cari nama atau @username (min. 2 huruf)';search.autocomplete='off';search.setAttribute('aria-label','Cari pengguna untuk izin panggilan');
+ const status=element('select');status.setAttribute('aria-label','Filter status izin');
+ for(const [key,label] of [['all','Semua pengguna'],['pending','Menunggu'],['approved','Diizinkan'],['rejected','Ditolak / dicabut'],['expired','Kedaluwarsa'],['none','Belum pernah mengajukan']]){
+  const o=element('option','',label);o.value=key;status.append(o)
+ }
+ const list=element('div','tc-admin-users');
+ const controls=element('div','tc-admin-search');controls.append(search,status);
+ const reload=element('button','tc-admin-refresh','↻ Perbarui daftar');reload.type='button';
+ wrap.append(info,controls,reload,list);root.append(wrap);
+ let last=0,delay;
+ const states={pending:'Menunggu',approved:'Diizinkan',rejected:'Ditolak / dicabut',expired:'Kedaluwarsa',none:'Belum ada izin'};
+ async function refresh(){
+  const seq=++last;
+  list.replaceChildren(element('small','','Memuat data pengguna…'));
+  reload.disabled=true;
+  try{
+   const q=search.value.trim();
+   if(q.length===1){list.replaceChildren(element('small','','Ketik minimal 2 huruf, atau kosongkan pencarian untuk daftar semua pengguna.'));return}
+   const d=await api('/api/calls/access/users?q='+encodeURIComponent(q)+'&status='+encodeURIComponent(status.value));
+   if(seq!==last)return;
+   list.replaceChildren();
+   if(!d.users.length){list.append(element('small','','Tidak ada pengguna yang cocok.'));return}
+   for(const person of d.users){
+    const item=element('section','tc-admin-user');
+    const title=element('div','tc-admin-user-title');
+    title.append(element('b','',person.display_name||person.username),element('small','','@'+person.username));
+    const state=element('small','tc-admin-status',states[person.state]||person.state);
+    if(person.state==='approved'&&person.expires_at){
+     const date=new Date(person.expires_at.replace(' ','T')+'Z');
+     const duration=Math.max(0,date.getTime()-Date.now());
+     state.textContent+=' · Sisa '+(duration>=86400000?Math.ceil(duration/86400000)+' hari':Math.ceil(duration/3600000)+' jam');
+    }
+    const duration=element('select');duration.setAttribute('aria-label','Masa berlaku izin '+person.username);
+    for(const [v,label] of [['1d','1 hari'],['7d','7 hari'],['30d','30 hari'],['forever','Tanpa batas waktu']]){
+     const opt=element('option','',label);opt.value=v;duration.append(opt);
+    }duration.value='7d';
+    const actions=element('div','tc-admin-actions');
+    const approve=element('button','tc-admin-approve',person.state==='approved'?'Perpanjang izin':'Beri izin');
+    const revoke=element('button','tc-admin-revoke','Cabut / Tolak');
+    approve.type=revoke.type='button';
+    approve.onclick=()=>update('approved');revoke.onclick=()=>update('rejected');
+    async function update(value){
+     const act=value==='approved'?'memberikan izin':'mencabut/menolak izin';
+     if(!confirm(`Yakin ${act} panggilan jarak jauh untuk @${person.username}?`))return;
+     approve.disabled=revoke.disabled=true;
+     try{await post('/api/calls/access/review',{userId:person.user_id,state:value,duration:duration.value});toast('Izin @'+person.username+' berhasil diperbarui.');await refresh()}
+     catch(error){toast(error.message);approve.disabled=revoke.disabled=false}
+    }
+    actions.append(duration,approve,revoke);item.append(title,state,actions);list.append(item);
+   }
+  }catch(error){if(seq===last)list.replaceChildren(element('small','','Gagal mengambil daftar: '+error.message))}
+  finally{reload.disabled=false}
+ }
+ search.addEventListener('input',()=>{clearTimeout(delay);delay=setTimeout(refresh,350)});
+ status.onchange=refresh;reload.onclick=refresh;
+ await refresh();
+}
+if(adminEntry)adminEntry.onclick=()=>void openAdminPanel();
+
 $('settingsBtn').onclick=()=>{
  modal('Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
  if(me?.is_admin)$('modalDesc').append(' ',officialBadge());
@@ -863,7 +930,8 @@ $('settingsBtn').onclick=()=>{
    saveName.disabled=true;
    try{const d=await post('/api/auth/profile',{displayName:name});me=d.user;
      document.querySelector('.profile b').textContent=me.display_name;
-     syncVerifiedBadges();
+     if(adminEntry)adminEntry.hidden=!me.is_admin;
+  syncVerifiedBadges();
      paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
      $('modalDesc').textContent=`${me.display_name} (@${me.username})`;
      if(me.is_admin)$('modalDesc').append(' ',officialBadge());
@@ -1484,9 +1552,10 @@ async function init(){
   const d=await api('/api/auth/me');me=d.user;
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
+  if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.9'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.0'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
@@ -1498,8 +1567,8 @@ async function init(){
   setTimeout(refreshInstallOffer,1300);
   const urlParams=new URLSearchParams(location.search);
   if(urlParams.get('adminCalls')==='1'&&me?.is_admin){
-    // Tautan dari notifikasi pengajuan langsung membuka menu Pengaturan admin.
-    $('settingsBtn').click();
+    // Pengajuan masuk langsung membuka panel admin khusus.
+    if(adminEntry)adminEntry.click();
     history.replaceState(null,'',location.pathname);
   }
   const linkedChat=urlParams.get('chat');

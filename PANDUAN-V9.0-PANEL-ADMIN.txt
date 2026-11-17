@@ -1,0 +1,14 @@
+TemanChat V9.0 FULL - Panel Admin Mandiri
+
+1. Salin seluruh isi ZIP ini ke repository temanchat-app (cadangkan dahulu).
+2. Commit dan Push melalui GitHub Desktop. Tunggu Cloudflare deployment Ready.
+3. Pastikan Secret TC_CALL_ADMIN_EMAIL berisi email login akun @admin.
+4. Login dengan @admin. Pada daftar chat ada tombol ◆ Admin di dekat Riwayat Panggilan.
+5. Klik Admin, cari nama atau @username (minimal 2 karakter), pilih masa berlaku, lalu Beri izin.
+6. Cabut/Tolak akan mencabut akses panggilan jarak jauh untuk panggilan BARU.
+7. Pengguna lain tidak memiliki tombol Admin. Endpoint server juga menolak pengguna bukan admin.
+8. Admin tetap memiliki izin jarak jauh permanen. Pengguna biasa tetap default Lokal.
+9. Penerima telepon tidak harus punya izin untuk menjawab panggilan jarak jauh.
+10. Cloudflare TURN tetap dibutuhkan pada jaringan yang memblokir sambungan WebRTC langsung.
+11. Akun yang baru disetujui harus memperbarui status izin/mengatur mode jarak jauh di perangkatnya.
+12. Pengaturan V8.9, Google Drive dan fitur chat tetap tersedia.

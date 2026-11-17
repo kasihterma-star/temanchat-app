@@ -283,6 +283,24 @@ export async function handleExtra(request, env, me, deps){
     FROM tc_remote_call_access a JOIN users u ON u.id=a.user_id ORDER BY CASE a.state WHEN 'pending' THEN 0 ELSE 1 END,a.requested_at DESC LIMIT 100`).all();
   return res({ok:true,requests:list.results||[]});
  }
+ if(p==='/api/calls/access/users'&&request.method==='GET'){
+  if(!isCallAdmin(env,me))return bad('Hanya administrator yang dapat mencari pengguna.',403);
+  if(!await deps.limit(request,env,'remote-call-admin-users',45,me.id))return bad('Terlalu banyak pencarian.',429);
+  const query=String(u.searchParams.get('q')||'').trim().replace(/^@/,'').slice(0,60);
+  if(query&&query.length<2)return res({ok:true,users:[]});
+  const statusFilter=String(u.searchParams.get('status')||'all');
+  if(!['all','pending','approved','rejected','expired','none'].includes(statusFilter))return bad('Filter tidak dikenal.',400);
+  const result=await env.DB.prepare(`SELECT usr.id AS user_id,usr.username,usr.display_name,
+    CASE WHEN access.state='approved' AND access.expires_at IS NOT NULL AND access.expires_at<=datetime('now') THEN 'expired'
+         ELSE COALESCE(access.state,'none') END AS state,
+    access.expires_at,access.requested_at
+    FROM users usr LEFT JOIN tc_remote_call_access access ON access.user_id=usr.id
+    WHERE usr.id<>? AND (?='' OR instr(lower(usr.username),lower(?))>0 OR instr(lower(usr.display_name),lower(?))>0)
+    ORDER BY CASE WHEN access.state='pending' THEN 0 WHEN access.state='approved' THEN 1 ELSE 2 END,
+     usr.username COLLATE NOCASE LIMIT 120`).bind(me.id,query,query,query).all();
+  const users=(result.results||[]).filter(row=>statusFilter==='all'||row.state===statusFilter).slice(0,60);
+  return res({ok:true,users});
+ }
  if(p==='/api/calls/access/review'&&request.method==='POST'){
   if(!isCallAdmin(env,me))return bad('Hanya admin panggilan yang dapat menyetujui.',403);
   if(!await deps.limit(request,env,'remote-call-review',30,me.id))return bad('Terlalu banyak permintaan.',429);
@@ -294,9 +312,14 @@ export async function handleExtra(request, env, me, deps){
   const durationSql={ '1d':'+1 day','7d':'+7 days','30d':'+30 days' };
   // Durasi hanya berlaku pada persetujuan. Penolakan/pencabutan menghapus expiry.
   const expiry=d.state==='approved'&&duration!=='forever'?durationSql[duration]:null;
-  const changed=await env.DB.prepare(`UPDATE tc_remote_call_access SET state=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,expires_at=CASE WHEN ? IS NULL THEN NULL ELSE datetime('now',?) END WHERE user_id=?`)
-    .bind(d.state,me.id,expiry,expiry,d.userId).run();
-  if(!changed.meta.changes)return bad('Pengajuan tidak ditemukan.',404);
+  // Admin boleh memberikan izin langsung kepada pengguna yang belum pernah mengajukan.
+  const target=await env.DB.prepare('SELECT id FROM users WHERE id=? LIMIT 1').bind(d.userId).first();
+  if(!target)return bad('Akun pengguna tidak ditemukan.',404);
+  await env.DB.prepare(`INSERT INTO tc_remote_call_access(user_id,state,requested_at,reviewed_at,reviewed_by,expires_at)
+    VALUES(?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?,CASE WHEN ? IS NULL THEN NULL ELSE datetime('now',?) END)
+    ON CONFLICT(user_id) DO UPDATE SET state=excluded.state,reviewed_at=CURRENT_TIMESTAMP,
+    reviewed_by=excluded.reviewed_by,expires_at=excluded.expires_at`)
+    .bind(d.userId,d.state,me.id,expiry,expiry).run();
   deps.sendPush?.(d.userId,{kind:'call_access_result',title:'Izin Panggilan TemanChat',body:d.state==='approved'?'Pengajuan panggilan jarak jauh disetujui.':'Izin panggilan jarak jauh ditolak atau dicabut.',url:'/',tag:'tc-call-access-result'},3600);
   return res({ok:true,state:d.state,duration:d.state==='approved'?duration:null});
  }

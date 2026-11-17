@@ -549,3 +549,20 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 
 .tc-call-mode-hint{display:block;text-align:center;font-size:12px;line-height:1.45;opacity:.78;padding:5px 14px;max-width:320px;margin:0 auto}
 .tc-call-admin-requests{display:grid;gap:8px}.tc-call-access-item{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:9px;border:1px solid var(--line,rgba(128,128,128,.2));border-radius:12px}.tc-call-access-item small{flex:1 1 100%}
+
+/* V9.0 • Panel administrator mandiri, responsif dan ramah layar kecil */
+.tc-admin-entry{font-size:12px!important;white-space:nowrap;border:1px solid rgba(43,123,209,.35)!important;color:#2677d6!important;background:rgba(43,123,209,.08)!important;padding:8px 12px!important;border-radius:12px!important;font-weight:800!important;min-height:38px}
+.tc-admin-entry[hidden]{display:none!important}
+.tc-admin-panel{display:grid;gap:13px;min-width:0}
+.tc-admin-summary{border:1px solid var(--line-soft);background:var(--accent-soft);color:var(--text);padding:12px;border-radius:13px;font-size:12px;line-height:1.6}
+.tc-admin-search{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,38%);gap:8px}
+.tc-admin-search input,.tc-admin-search select,.tc-admin-actions select{min-width:0;width:100%;border:1px solid var(--line-soft);background:var(--control);color:var(--text);border-radius:10px;padding:10px;font-size:13px}
+.tc-admin-refresh{border:1px solid var(--line-soft);color:var(--text);background:var(--control);border-radius:10px;padding:9px 12px;font-weight:700}
+.tc-admin-users{display:grid;gap:10px;max-height:min(52vh,460px);overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
+.tc-admin-user{display:grid;gap:8px;padding:12px;border:1px solid var(--line-soft);background:var(--control);border-radius:13px}
+.tc-admin-user-title{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.tc-admin-user-title b{font-size:13px}.tc-admin-user-title small,.tc-admin-status{font-size:11px;color:var(--muted)}
+.tc-admin-actions{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr);gap:6px}
+.tc-admin-actions button{border:0;border-radius:9px;padding:9px 6px;font-size:11px;font-weight:700}
+.tc-admin-approve{background:var(--accent);color:#fff}.tc-admin-revoke{background:rgba(206,62,69,.12);color:#c24d56}
+@media(max-width:550px){.tc-admin-search{grid-template-columns:1fr}.tc-admin-actions{grid-template-columns:1fr 1fr}.tc-admin-actions select{grid-column:span 2}}
