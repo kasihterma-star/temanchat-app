@@ -3,3 +3,8 @@
 .logo{overflow:hidden;padding:0;background:transparent}.logo img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
 
 .tc-auth-share{margin:15px auto 0;text-align:center}.tc-auth-share button{width:100%;min-height:44px;border-radius:11px;border:1px solid #c7ded6;background:#f0f8f4;color:#087461;font-weight:750;font-size:13px;cursor:pointer}.tc-auth-share button:focus-visible{outline:2px solid #087461;outline-offset:3px}@media(max-width:480px){.shell{min-height:100dvh;align-items:start;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom))}.panel{padding:22px 18px}.panel input{font-size:16px}.turnstile{max-width:100%;overflow:hidden}}
+
+/* V8.6: tombol pemulihan untuk browser WhatsApp/Safari */
+.tc-auth-recovery{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:4px 0 12px}
+.tc-auth-recovery button{border:1px solid #b8d8ca;border-radius:10px;background:#f0f8f4;color:#076853;padding:10px 14px;min-height:44px;font-size:13px;font-weight:700;cursor:pointer}
+.tc-auth-recovery button[hidden]{display:none!important}

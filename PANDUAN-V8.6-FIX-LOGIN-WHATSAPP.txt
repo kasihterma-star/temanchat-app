@@ -1,0 +1,16 @@
+TemanChat V8.6 — Perbaikan layar login saat dibuka dari WhatsApp/iPhone
+
+1. Cadangkan repo sebelum menimpa file.
+2. Ekstrak isi ZIP dan salin ke folder GitHub temanchat-app.
+3. Commit lalu Push origin, tunggu Deployments Ready di Cloudflare.
+4. Buka https://chat.ege.my.id/ lewat WhatsApp iPhone dan langsung Safari untuk membandingkan.
+
+Perubahan:
+- Memeriksa ketersediaan fungsi Turnstile render(), bukan hanya objek turnstile.
+- Memuat ulang skrip keamanan otomatis satu kali bila belum siap, tanpa loop refresh halaman.
+- Tombol Coba Lagi Verifikasi dan Muat Ulang pada halaman login.
+- Service Worker cache baru dan asset version 8.6.0 untuk pembaruan perangkat.
+- Tidak mengubah mekanisme validasi token Turnstile server.
+
+Bila WhatsApp WebView memblokir challenges.cloudflare.com, silakan gunakan opsi Buka di Safari/Chrome dari menu WhatsApp.
+Tidak ada jaminan bahwa refresh akan memperbaiki pemblokiran di browser embedded.
