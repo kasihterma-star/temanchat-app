@@ -82,7 +82,21 @@ export async function handleGoogle(req,env,me){
  await ensureGoogleSchema(env);
  if(path==='/api/google/status'&&req.method==='GET'){
   const item=await env.DB.prepare('SELECT connected_at,expires_at FROM tc_google_drive_accounts WHERE user_id=?').bind(me.id).first();
-  return json({ok:true,configured:true,connected:!!item,connectedAt:item?.connected_at||null});
+  let accountEmail=null,accountName=null,accountWarning=null;
+  if(item){
+   try{
+    // Drive about.get bisa diakses dengan izin drive.file yang SUDAH ada.
+    // Tidak perlu meminta scope email tambahan atau menyimpan email di D1.
+    const token=await googleAccessToken(env,me.id);
+    const r=await fetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress,displayName)',{
+     headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(8000)});
+    if(!r.ok)throw Error('HTTP '+r.status);
+    const about=await r.json();
+    accountEmail=typeof about.user?.emailAddress==='string'?about.user.emailAddress:null;
+    accountName=typeof about.user?.displayName==='string'?about.user.displayName:null;
+   }catch(error){console.warn('Drive account info',error?.message);accountWarning='Identitas akun belum dapat diperiksa. Coba muat ulang.';}
+  }
+  return json({ok:true,configured:true,connected:!!item,connectedAt:item?.connected_at||null,accountEmail,accountName,accountWarning});
  }
  if(path==='/api/google/connect'&&req.method==='GET'){
   const sh=await sessionHash(req);if(!sh)return json({error:'Sesi tidak valid.'},401);

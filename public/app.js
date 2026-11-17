@@ -942,7 +942,7 @@ $('settingsBtn').onclick=()=>{
  const connect=element('button','primary','Hubungkan Google Drive');
  const disconnect=element('button','tc-media-action','Putuskan Google Drive');
  const refreshDrive=async()=>{
-  try{const d=await TCS.driveStatus();driveState.textContent=d.connected?'✓ Google Drive sudah terhubung':'Google Drive belum terhubung';connect.hidden=!!d.connected;disconnect.hidden=!d.connected;}
+  try{const d=await TCS.driveStatus();driveState.textContent=d.connected?(d.accountEmail?'✓ Terhubung: '+d.accountEmail:(d.accountWarning?'✓ Drive terhubung — '+d.accountWarning:'✓ Drive terhubung (email tidak tersedia)')):'Google Drive belum terhubung';connect.hidden=!!d.connected;disconnect.hidden=!d.connected;}
   catch(e){driveState.textContent='Tidak dapat memeriksa koneksi: '+e.message;disconnect.hidden=true;}
  };
  connect.onclick=()=>TCS.connectGoogle();
@@ -1237,6 +1237,7 @@ $('muteCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const tr
 $('cameraCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getVideoTracks())track.enabled=!track.enabled;$('cameraCall').querySelector('span').textContent=c.stream.getVideoTracks()[0]?.enabled?'Kamera aktif':'Kamera mati';};
 async function preparePeer(c){
  const opts=await api('/api/calls/config');
+ if(!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'Relay TURN tidak tersedia; jaringan berbeda mungkin gagal.');
  const constraints=c.kind==='audio'
   ? {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}
   : {audio:true,video:true};
@@ -1278,7 +1279,7 @@ async function preparePeer(c){
    },VOICE_DISCONNECT_GRACE_MS);
   }else if(['failed','closed'].includes(state)){
    clearVoiceDisconnectTimer(c);
-   toast('Koneksi panggilan terputus. TURN mungkin diperlukan.');void hangup();
+   toast(opts.turnConfigured?'Koneksi panggilan gagal. Periksa jaringan kedua perangkat.':'Koneksi panggilan gagal. Aktifkan Cloudflare TURN untuk jaringan berbeda.');void hangup();
   }
  };
  if(c.kind==='video'){$('localVideo').srcObject=stream;$('localVideo').style.display='block';}
@@ -1395,7 +1396,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.3'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.4'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

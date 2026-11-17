@@ -254,7 +254,32 @@ export async function handleExtra(request, env, me, deps){
   });
   return res({ok:true,calls});
  }
- if(p==='/api/calls/config'&&request.method==='GET')return res({ok:true,iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}],turnConfigured:false});
+ if(p==='/api/calls/config'&&request.method==='GET'){
+  const fallback=[{urls:['stun:stun.cloudflare.com:3478','stun:stun.l.google.com:19302']}];
+  // Cloudflare Realtime TURN: secret jangka panjang hanya ada di Worker.
+  // Browser menerima kredensial sementara untuk satu sesi panggilan.
+  if(!env.CF_TURN_KEY_ID||!env.CF_TURN_API_TOKEN)
+    return res({ok:true,iceServers:fallback,turnConfigured:false,turnWarning:'TURN belum diaktifkan. Panggilan pada jaringan berbeda mungkin gagal.'});
+  try{
+    if(!/^[a-zA-Z0-9_-]{8,128}$/.test(env.CF_TURN_KEY_ID))throw Error('TURN key ID tidak valid');
+    const response=await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(env.CF_TURN_KEY_ID)}/credentials/generate-ice-servers`,{
+      method:'POST',headers:{'Authorization':'Bearer '+env.CF_TURN_API_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({ttl:21600}),signal:AbortSignal.timeout(8000)
+    });
+    if(!response.ok)throw Error('TURN provider HTTP '+response.status);
+    const data=await response.json();
+    // Jangan terima URL lain dari response yang tidak sesuai dengan TURN Cloudflare.
+    const iceServers=Array.isArray(data.iceServers)?data.iceServers.filter(x=>x&&Array.isArray(x.urls)).map(x=>({
+      urls:x.urls.filter(u=>typeof u==='string'&&/^(stun:stun\.cloudflare\.com:3478|turns?:turn\.cloudflare\.com:(?:3478|443|80|5349)(?:\?transport=(?:tcp|udp))?)$/.test(u)),
+      ...(typeof x.username==='string'&&typeof x.credential==='string'?{username:x.username,credential:x.credential}:{})
+    })).filter(x=>x.urls.length):[];
+    if(!iceServers.some(x=>x.username&&x.credential&&x.urls.some(u=>u.startsWith('turn'))))throw Error('Provider tidak mengembalikan kredensial TURN');
+    return res({ok:true,iceServers,turnConfigured:true});
+  }catch(error){
+    console.warn('TURN setup',error?.message||'unknown');
+    return res({ok:true,iceServers:fallback,turnConfigured:false,turnWarning:'Server relay TURN sementara tidak tersedia. Coba kembali atau periksa Secret TURN.'});
+  }
+ }
  if(p==='/api/calls/start'&&request.method==='POST'){
   const d=await deps.readJSON(request),chat=await member(env,trimmed(d.conversationId),me.id),kind=trimmed(d.kind);
   if(!chat||!['audio','video'].includes(kind))return bad('Percakapan atau jenis panggilan tidak valid.');

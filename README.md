@@ -1,3 +1,17 @@
+# TemanChat V8.4 FULL — Panggilan Lintas Jaringan & Identitas Google Drive
+
+Baca **PANDUAN-V8.4-TURN-GOOGLE-AKUN.txt** sebelum memasang.
+
+Yang baru:
+- WebRTC meminta ephemeral ICE servers dari Cloudflare Realtime TURN melalui Worker bila dua Secrets dikonfigurasi.
+- STUN fallback memberikan peringatan jelas jika TURN belum tersedia.
+- Google Drive pribadi menampilkan email akun terhubung lewat Drive API `about.get` dengan `drive.file` yang sudah ada.
+- Semua fitur V8.3 dipertahankan.
+
+**Dua Secret baru wajib agar panggilan beda jaringan memakai TURN:** `CF_TURN_KEY_ID` dan `CF_TURN_API_TOKEN`. Jangan disimpan di GitHub.
+
+**Catatan:** pengujian lokal memverifikasi struktur dan sintaks, tidak menguji jaringan WebRTC antar-HP atau kredensial Cloudflare sebenarnya.
+
 # TemanChat V7.6 — Rebuild bersih dari V7.5
 
 Sumber: ZIP V7.5 yang diunggah pengguna. Versi ini tidak memakai file repository GitHub yang sempat mengandung konflik merge.

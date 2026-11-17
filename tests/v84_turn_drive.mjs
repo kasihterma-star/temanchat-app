@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const extra=readFileSync('src/extras.js','utf8');
+const google=readFileSync('src/google-drive.js','utf8');
+const app=readFileSync('public/app.js','utf8');
+const sw=readFileSync('public/sw.js','utf8');
+assert.match(extra,/CF_TURN_KEY_ID/);
+assert.match(extra,/CF_TURN_API_TOKEN/);
+assert.match(extra,/generate-ice-servers/);
+assert.match(extra,/ttl:21600/);
+assert.match(extra,/turnConfigured:true/);
+assert.match(extra,/turnWarning/);
+assert.match(google,/drive\/v3\/about\?fields=user\(emailAddress,displayName\)/);
+assert.match(google,/accountEmail/);
+assert.match(app,/Terhubung: /);
+assert.match(app,/opts.turnConfigured/);
+assert.match(sw,/temanchat-v84-turn-drive/);
+console.log('PASS V8.4: Cloudflare ephemeral TURN + Google Drive linked account');
