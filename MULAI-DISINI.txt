@@ -1,22 +1,23 @@
-TEMANCHAT V6 TERPADU — CARA TERMUDAH (SATU KALI UPDATE)
-=====================================================
+TEMANCHAT — HALAMAN LEGAL GOOGLE OAUTH
 
-1. BACKUP repository TemanChat lama terlebih dahulu.
-2. Dengan GitHub Desktop (disarankan): clone repository kasihterma-star/temanchat-app.
-3. Ekstrak ZIP ini dan COPY SEMUA ISINYA ke folder repository hasil clone.
-   Biarkan struktur folder src/ dan public/ tetap sama; izinkan Replace file lama.
-4. GitHub Desktop → Commit to main → Push origin. Satu commit saja.
-5. Cloudflare → temanchat-app → Deployments → tunggu status Ready.
-6. Uji chat.ege.my.id memakai HP & PC. Login dan pesan teks sudah dihubungkan
-   dengan database D1 lama. TIDAK perlu buat tabel D1 manual lagi untuk V6.
+Isi ZIP: public/tentang.html, public/kebijakan-privasi.html, public/ketentuan-layanan.html, public/legal.css
 
-PENTING:
-- Secret TURNSTILE_SECRET_KEY dan RESEND_API_KEY tetap di Cloudflare.
-- Default tanpa R2: chat teks bekerja; unggah foto masih nonaktif.
-- Untuk mengaktifkan foto, buat bucket temanchat-media dulu, lalu gunakan
-  isi file wrangler-media-ready.jsonc sebagai wrangler.jsonc di GitHub.
-- Google Drive: masih perlu Google OAuth Client ID, ada di public/config.js.
-- Panggilan audio/video masih eksperimental tanpa TURN dan notifikasi push.
-- Jangan mengunggah file ZIP utuh sebagai kode aplikasi; ekstrak dahulu.
+1. Ekstrak ZIP.
+2. Salin isi folder public ke Documents\GitHub\temanchat-app\public (hanya 4 file).
+3. GitHub Desktop: Commit lalu Push origin.
+4. Pastikan Cloudflare deployment Ready.
+5. Uji masing-masing alamat dalam mode incognito, TANPA login:
+   https://chat.ege.my.id/tentang.html
+   https://chat.ege.my.id/kebijakan-privasi.html
+   https://chat.ege.my.id/ketentuan-layanan.html
+6. Google Auth Platform > Branding:
+   Application home page = https://chat.ege.my.id/tentang.html
+   Privacy policy URL = https://chat.ege.my.id/kebijakan-privasi.html
+   Terms of service URL = https://chat.ege.my.id/ketentuan-layanan.html
+   Authorized domains = ege.my.id
 
-Panduan lengkap: README.md
+PENTING: Homepage OAuth sengaja /tentang.html karena / saat ini adalah app yang meminta login. Google menghendaki homepage publik yang mendeskripsikan aplikasi dan menautkan kebijakan privasi.
+
+Periksa alamat kontak 'akun@ege.my.id' sesuai alamat yang benar-benar aktif. Jika berbeda, ganti pada ketiga halaman sebelum deploy.
+
+Dokumen ini tidak membuat fitur Google Drive menjadi aktif. OAuth callback dan koneksi Drive membutuhkan implementasi kode tambahan. Tinjau kembali semua isi kebijakan sebelum dipublikasikan, terutama praktik retensi dan penyimpanan akun pengguna.

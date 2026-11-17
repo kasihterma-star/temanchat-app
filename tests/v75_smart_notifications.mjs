@@ -13,7 +13,7 @@ assert.match(app,/pagehide',leaveNotificationFocus/);
 assert.match(app,/touchstart/);assert.match(app,/touchmove/);assert.match(app,/touchend/);
 assert.match(app,/distance>=62/);assert.match(css,/\.tc-swipe-reply-icon/);
 assert.match(css,/\.tc-voice-wave/);assert.match(html,/class="tc-voice-wave"/);
-assert.match(app,/tc-audio-shell/);assert.match(sw,/temanchat-v77-google-drive/);
+assert.match(app,/tc-audio-shell/);assert.match(sw,/temanchat-v81-devices/);
 // D1 mock: verifies authorized focus, authorization failure and skip for active chat.
 const user='u1',chat='11111111-1111-4111-8111-111111111111',endpoint='https://fcm.googleapis.com/fcm/send/test';
 const trace=[],mock={
@@ -46,13 +46,13 @@ assert.equal(foreignChat.status,403);
 trace.length=0;
 await sendPush(env,user,{kind:'message',conversationId:chat,title:'Test',body:'a'});
 assert(trace.some(x=>x.sql.includes('SELECT 1 FROM tc_push_focus')));
-assert(!trace.some(x=>x.sql.includes('SELECT id,endpoint,p256dh,auth FROM tc_push_subscriptions')),'should mute active same-chat push');
+assert(!trace.some(x=>x.sql.includes('SELECT s.id,s.endpoint,s.p256dh,s.auth FROM tc_push_subscriptions s')),'should mute active same-chat push');
 trace.length=0;
 await sendPush(env,user,{kind:'message',conversationId:'22222222-2222-4222-8222-222222222222',title:'Chat berbeda'});
-assert(trace.some(x=>x.sql.includes('SELECT id,endpoint,p256dh,auth FROM tc_push_subscriptions')),'other chats still notify');
+assert(trace.some(x=>x.sql.includes('SELECT s.id,s.endpoint,s.p256dh,s.auth FROM tc_push_subscriptions s')),'other chats still notify');
 trace.length=0;
 await sendPush(env,user,{kind:'call',callId:'cid',title:'Call'});
-assert(trace.some(x=>x.sql.includes('SELECT id,endpoint,p256dh,auth FROM tc_push_subscriptions')),'calls must not be muted by chat focus');
+assert(trace.some(x=>x.sql.includes('SELECT s.id,s.endpoint,s.p256dh,s.auth FROM tc_push_subscriptions s')),'calls must not be muted by chat focus');
 const cleared=await pushApi(request({endpoint,active:false}),env,{id:user});
 assert.equal(cleared.status,200);
 assert(trace.some(x=>x.sql.includes('DELETE FROM tc_push_focus')));

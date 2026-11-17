@@ -1,0 +1,12 @@
+TemanChat V7.6 - Orientasi Foto & Balas di HP
+
+1. Paket ini mempertahankan backend V7.5 dan binding R2/D1.
+2. Ketika memilih FOTO (dari kamera atau galeri), muncul pratinjau.
+3. Normal (bawaan) mengirim berkas apa adanya. Mode Cermin (opsional) membalik gambar secara horizontal dan mengirim hasil sesuai pratinjau.
+4. Browser/PWA tidak dapat mengetahui apakah iPhone telah mencerminkan foto melalui pengaturan kamera native. Karena itu mode cermin TIDAK dijalankan otomatis; pengguna dapat memilih secara jelas. Foto asli tidak diubah.
+5. GIF dikirim apa adanya supaya animasi tidak hilang; video/dokumen juga mengikuti alur lama.
+6. Balasan di HP diberi batas lebar agar pratinjau dan menu tindakan tidak keluar layar.
+7. Salin seluruh isi ZIP ke folder proyek GitHub, lalu Commit dan Push.
+8. Periksa deployment Cloudflare Ready. Uji: foto kamera depan Normal/Cermin, foto galeri Normal, Batal unggah, balas pesan di layar kecil.
+
+Catatan: hasil di iPhone fisik belum diverifikasi; mirroring dapat menghasilkan gambar yang berbeda dari pengaturan kamera bawaan.
