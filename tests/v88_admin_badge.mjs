@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const server=fs.readFileSync('src/index.js','utf8');
+const ui=fs.readFileSync('public/app.js','utf8');
+const css=fs.readFileSync('public/style.css','utf8');
+assert.match(server,/const publicUser=\(u,env\)=>/);
+assert.match(server,/TC_CALL_ADMIN_EMAIL/);
+assert.match(server,/is_admin:Number\(u.username===admin\?\.username\)/);
+assert.match(server,/other_is_admin:Number\(c.other_username===admin\?\.username\)/);
+assert.match(ui,/function officialBadge\(\)/);
+assert.match(ui,/syncVerifiedBadges\(\)/);
+assert.match(ui,/if\(Number\(c.other_is_admin\)===1\)nameWrap.append\(officialBadge\(\)\)/);
+assert.match(ui,/if\(c&&Number\(c.other_is_admin\)===1\)/);
+assert.match(css,/tc-verified-badge/);
+console.log('PASS V8.8: badge is server-authorized and visible in account/chat/search/settings');

@@ -1,6 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-const CACHE='temanchat-v86-auth-recovery';
-const ASSETS=['/style.css?v=8.6.0','/v6.css?v=8.6.0','/share.js?v=8.6.0','/app.js?v=8.6.0','/storage.js?v=8.6.0','/config.js?v=8.6.0','/auth.css?v=8.6.0','/auth.js?v=8.6.0','/confirm-email.js?v=8.6.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
+const CACHE='temanchat-v88-admin-badge';
+const ASSETS=['/style.css?v=8.8.0','/v6.css?v=8.8.0','/share.js?v=8.8.0','/app.js?v=8.8.0','/storage.js?v=8.8.0','/config.js?v=8.8.0','/auth.css?v=8.8.0','/auth.js?v=8.8.0','/confirm-email.js?v=8.8.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });

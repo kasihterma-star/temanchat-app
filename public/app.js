@@ -9,6 +9,8 @@ let replyTarget=null,mediaPrefs={mode:'none',noticeSeen:false},noticeShowing=fal
 let voiceRecorder=null,voiceStream=null,voiceChunks=[],voiceTimer=null,voiceStart=0,voiceElapsed=0;
 let voiceLocked=false,voicePendingStart=false,voicePressing=false,voicePressY=0,voicePressX=0,voiceCancelRequested=false;
 const MAX_VOICE_MS=180000;
+const CALL_MODE_KEY='tc_call_mode_v87';
+let remoteCallGranted=false;
 let presenceBusy=false,lastPresenceBeat=0;
 const PRESENCE_PING_MS=45000;
 // V7.2: indikator mengetik tidak mengirim konten dan tidak menyimpan histori.
@@ -282,7 +284,10 @@ function showChat(){if(innerWidth<=740){$('sidebar').classList.remove('mobile-vi
 function showList(){stopTyping();if(innerWidth<=740){$('sidebar').classList.add('mobile-visible');$('conversation').classList.add('mobile-hidden');}updateNotificationFocus(true);}
 function placeholder(msg){$('messages').replaceChildren(element('div','day',msg));}
 function updateHeader(c){
- $('headName').textContent=c?c.other_name:'Pilih teman';paintAvatar($('headAvatar'),c?.other_name,c?.other_username);
+ $('headName').textContent=c?c.other_name:'Pilih teman';
+ document.querySelectorAll('.tc-header-verified').forEach(el=>el.remove());
+ if(c&&Number(c.other_is_admin)===1){const badge=officialBadge();badge.classList.add('tc-header-verified');$('headName').after(badge)}
+ paintAvatar($('headAvatar'),c?.other_name,c?.other_username);
  const isTyping=!!c&&c.id===active?.id&&partnerTyping;
  $('headStatus').textContent=isTyping?'Sedang mengetik…':presenceLabel(c);
  $('headStatus').classList.toggle('tc-status-typing',isTyping);
@@ -301,11 +306,33 @@ function updateHeader(c){
   button.setAttribute('aria-label',button.title);
  }
 }
+function officialBadge(){
+ const badge=element('span','tc-verified-badge');
+ badge.title='Administrator resmi TemanChat';
+ badge.setAttribute('aria-label','Administrator resmi TemanChat');
+ const ns='http://www.w3.org/2000/svg';
+ const svg=document.createElementNS(ns,'svg');
+ svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
+ const shape=document.createElementNS(ns,'path');
+ // Distinct scalloped seal and contrasting tick; no external icon dependency.
+ shape.setAttribute('d','M12 2 14.7 3.7 17.9 3.6 18.7 6.7 21.2 8.7 20.2 11.8 21.2 14.8 18.7 16.8 17.9 20 14.7 19.8 12 21.5 9.3 19.8 6.1 20 5.3 16.8 2.8 14.8 3.8 11.8 2.8 8.7 5.3 6.7 6.1 3.6 9.3 3.7Z');
+ shape.setAttribute('fill','currentColor');
+ const tick=document.createElementNS(ns,'path');
+ tick.setAttribute('d','M8 11.8l2.7 2.7 5.6-5.8');
+ tick.setAttribute('fill','none');tick.setAttribute('stroke','white');tick.setAttribute('stroke-width','2.2');tick.setAttribute('stroke-linecap','round');tick.setAttribute('stroke-linejoin','round');
+ svg.append(shape,tick);badge.append(svg);return badge;
+}
+function syncVerifiedBadges(){
+ document.querySelectorAll('.tc-self-verified').forEach(el=>el.remove());
+ if(!me?.is_admin)return;
+ const name=document.querySelector('.profile b');
+ if(name){const badge=officialBadge();badge.classList.add('tc-self-verified');name.after(badge)}
+}
 function renderChats(){
  const box=$('contacts'),q=$('search').value.trim().toLowerCase();box.replaceChildren();
  const list=q.length>=2&&searchResults!==null
   ?searchResults.map(u=>({other_name:u.display_name,other_username:u.username,
-    last_active_at:u.last_active_at,is_online:u.is_online,searchPerson:true}))
+    last_active_at:u.last_active_at,is_online:u.is_online,other_is_admin:u.is_admin,searchPerson:true}))
   :chats.filter(c=>!q||c.other_name.toLowerCase().includes(q)||c.other_username.includes(q));
  if(!list.length){box.append(element('p','tc-empty',q.length>=2?'Tidak ditemukan. Coba username lain.':'Belum ada percakapan. Cari username teman di atas.'));return}
  for(const c of list){
@@ -315,7 +342,10 @@ function renderChats(){
   const presenceDot=element('span','tc-presence-dot'+(isOnline?' online':''));
   presenceDot.title=presenceLabel(c);presenceDot.setAttribute('aria-label',presenceDot.title);
   av.append(presenceDot);av.classList.add('tc-avatar-with-presence');
-  top.append(element('b','',c.other_name),element('small','',c.searchPerson?'Cari teman':smallTime(c.last_time)));
+  const contactName=element('b','',c.other_name);
+  const nameWrap=element('span','tc-name-with-badge');nameWrap.append(contactName);
+  if(Number(c.other_is_admin)===1)nameWrap.append(officialBadge());
+  top.append(nameWrap,element('small','',c.searchPerson?'Cari teman':smallTime(c.last_time)));
   const typing=(!c.searchPerson)&&((active?.id===c.id&&partnerTyping)||Number(c.is_typing)===1);
   const statusLine=element('div','tc-contact-status'+(typing?' tc-status-typing':isOnline?' tc-status-online':''),
     typing?'Sedang mengetik…':presenceCompact(c));
@@ -333,7 +363,7 @@ function renderChats(){
     try{
      const d=await post('/api/chat/start',{username:c.other_username});
      $('search').value='';searchResults=null;await fetchChats();
-     await selectChat(chats.find(x=>x.id===d.conversationId)||{id:d.conversationId,other_name:c.other_name,other_username:c.other_username,last_active_at:c.last_active_at,is_online:c.is_online});
+     await selectChat(chats.find(x=>x.id===d.conversationId)||{id:d.conversationId,other_name:c.other_name,other_username:c.other_username,last_active_at:c.last_active_at,is_online:c.is_online,other_is_admin:c.other_is_admin});
     }catch(e){toast(e.message)}finally{b.disabled=false}
    }else await selectChat(c);
   });box.append(b);
@@ -819,6 +849,7 @@ async function showCallHistory(){
 $('callHistoryBtn').onclick=showCallHistory;
 $('settingsBtn').onclick=()=>{
  modal('Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
+ if(me?.is_admin)$('modalDesc').append(' ',officialBadge());
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
  const shareSettings=element('button','primary','↗ Bagikan TemanChat');shareSettings.type='button';shareSettings.onclick=()=>{ $('modal').close(); window.TCShare?.open(); };wrap.append(shareSettings);
  // Nama tampilan dapat diganti, username login tidak berubah.
@@ -832,8 +863,10 @@ $('settingsBtn').onclick=()=>{
    saveName.disabled=true;
    try{const d=await post('/api/auth/profile',{displayName:name});me=d.user;
      document.querySelector('.profile b').textContent=me.display_name;
+     syncVerifiedBadges();
      paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
      $('modalDesc').textContent=`${me.display_name} (@${me.username})`;
+     if(me.is_admin)$('modalDesc').append(' ',officialBadge());
      toast('Nama panggilan berhasil diperbarui.');
    }catch(e){toast(e.message)}finally{saveName.disabled=false}
  };
@@ -1071,6 +1104,45 @@ $('settingsBtn').onclick=()=>{
  refreshDevices.onclick=loadDeviceSessions;
  wrap.append(deviceTitle,deviceHint,refreshDevices,deviceList);
  void loadDeviceSessions();
+ // Pengajuan mode jarak jauh diproses server. Pilihan bawaan selalu lokal.
+ const callTitle=element('label','','Mode panggilan');
+ const callMode=element('select');
+ for(const [v,text] of [['local','Lokal — Wi-Fi / jaringan lokal yang sama'],['remote','Jarak jauh — khusus akun disetujui admin']]){
+   const opt=element('option','',text);opt.value=v;callMode.append(opt);
+ }
+ callMode.value=localStorage.getItem(CALL_MODE_KEY)==='remote'?'remote':'local';
+ const accessText=element('small','','Memeriksa akses jarak jauh…');
+ const requestAccess=element('button','primary','Ajukan akses panggilan jarak jauh');
+ const adminRequests=element('div','tc-call-admin-requests');
+ const refreshCallAccess=async()=>{
+   try{
+     const d=await api('/api/calls/access');remoteCallGranted=!!d.approved;
+     if(!remoteCallGranted){callMode.value='local';localStorage.setItem(CALL_MODE_KEY,'local');}
+     callMode.querySelector('option[value="remote"]').disabled=!d.approved;
+     accessText.textContent=d.admin?'Anda adalah admin panggilan.':d.approved?'Panggilan jarak jauh disetujui.':d.state==='pending'?'Pengajuan menunggu persetujuan admin.':d.state==='rejected'?'Pengajuan sebelumnya ditolak.':'Mode jarak jauh belum diaktifkan.';
+     requestAccess.hidden=!!d.approved||d.state==='pending'||!d.adminConfigured;
+     if(!d.adminConfigured)accessText.textContent='Admin panggilan belum dikonfigurasi.';
+     if(d.admin)await loadCallRequests();
+   }catch(e){remoteCallGranted=false;callMode.value='local';callMode.querySelector('option[value="remote"]').disabled=true;accessText.textContent='Status akses tidak tersedia: '+e.message;}
+ };
+ callMode.onchange=()=>{if(callMode.value==='remote'&&!remoteCallGranted){callMode.value='local';return toast('Ajukan dan tunggu persetujuan admin.');}localStorage.setItem(CALL_MODE_KEY,callMode.value);toast('Mode panggilan disimpan pada perangkat ini.');};
+ requestAccess.onclick=async()=>{requestAccess.disabled=true;try{await post('/api/calls/access/request',{});await refreshCallAccess();toast('Pengajuan dikirim kepada admin panggilan.')}catch(e){toast(e.message)}finally{requestAccess.disabled=false}};
+ async function loadCallRequests(){
+   const d=await api('/api/calls/access/requests');adminRequests.replaceChildren(element('b','','Pengajuan panggilan jarak jauh'));
+   if(!d.requests.length){adminRequests.append(element('small','','Belum ada pengajuan.'));return;}
+   for(const r of d.requests){
+     const item=element('div','tc-call-access-item');
+     item.append(element('small','',`${r.display_name} (@${r.username}) — ${r.state}`));
+     for(const [state,label] of [['approved','Setujui'],['rejected','Tolak / Cabut']]){
+       const btn=element('button','tc-media-action',label);btn.type='button';
+       btn.onclick=async()=>{if(!confirm(`${label} akses jarak jauh untuk @${r.username}?`))return;btn.disabled=true;try{await post('/api/calls/access/review',{userId:r.user_id,state});await loadCallRequests();toast('Akses diperbarui.')}catch(e){toast(e.message)}finally{btn.disabled=false}};
+       item.append(btn);
+     }
+     adminRequests.append(item);
+   }
+ }
+ wrap.append(callTitle,callMode,accessText,requestAccess,element('small','','Mode lokal tidak menggunakan TURN; panggilan perlu jaringan lokal yang saling terhubung. Mode jarak jauh memerlukan koneksi langsung WebRTC atau relay TURN bila jaringan memblokir koneksi.'),adminRequests);
+ void refreshCallAccess();
  const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{
    try{
     // Jangan biarkan perangkat yang logout menerima push akun sebelumnya.
@@ -1237,8 +1309,9 @@ $('hangupCall').onclick=hangup;
 $('muteCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getAudioTracks())track.enabled=!track.enabled;$('muteCall').querySelector('span').textContent=c.stream.getAudioTracks()[0]?.enabled?'Mikrofon aktif':'Mikrofon mati';};
 $('cameraCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getVideoTracks())track.enabled=!track.enabled;$('cameraCall').querySelector('span').textContent=c.stream.getVideoTracks()[0]?.enabled?'Kamera aktif':'Kamera mati';};
 async function preparePeer(c){
- const opts=await api('/api/calls/config');
- if(!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'Relay TURN tidak tersedia; jaringan berbeda mungkin gagal.');
+ const opts=await api('/api/calls/config?callId='+encodeURIComponent(c.id));
+ const hint=$('callModeHint');if(hint)hint.textContent=opts.mode==='remote'?'Mode jarak jauh: koneksi langsung atau TURN bila tersedia':'Mode lokal: hanya LAN / Wi-Fi yang saling terhubung';
+ if(opts.mode==='remote'&&!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'Mode jarak jauh sedang mencoba STUN langsung. Jika gagal, perlu TURN.');
  const constraints=c.kind==='audio'
   ? {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}
   : {audio:true,video:true};
@@ -1323,7 +1396,8 @@ async function startCall(kind){
  if(!Number(active.call_unlocked||0))return toast('Saling bertukar pesan terlebih dahulu untuk memulai panggilan suara atau video.');
  if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)return toast('Browser ini belum mendukung WebRTC atau izin mikrofon/kamera.');
  try{
-  const d=await post('/api/calls/start',{conversationId:active.id,kind});
+  const mode=remoteCallGranted&&localStorage.getItem(CALL_MODE_KEY)==='remote'?'remote':'local';
+  const d=await post('/api/calls/start',{conversationId:active.id,kind,mode});
   const c={id:d.callId,kind,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
   // Batasi panggilan tidak terjawab ~30 detik tanpa menunggu cron 1 menit.
   c.timeoutTimer=setTimeout(async()=>{
@@ -1396,8 +1470,9 @@ async function init(){
   const d=await api('/api/auth/me');me=d.user;
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
+  syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.4'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.8'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

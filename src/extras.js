@@ -62,7 +62,17 @@ export function ensureExtras(env) {
          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
          FOREIGN KEY(call_id) REFERENCES tc_call_sessions(id) ON DELETE CASCADE
        )`,
-      `CREATE INDEX IF NOT EXISTS idx_tc_call_signals ON tc_call_signals(call_id,id)`
+      `CREATE INDEX IF NOT EXISTS idx_tc_call_signals ON tc_call_signals(call_id,id)`,
+      `CREATE TABLE IF NOT EXISTS tc_remote_call_access (
+        user_id TEXT PRIMARY KEY, state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','approved','rejected')),
+        requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at TEXT, reviewed_by TEXT,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`,
+      `CREATE TABLE IF NOT EXISTS tc_call_modes (
+        call_id TEXT PRIMARY KEY, mode TEXT NOT NULL CHECK(mode IN ('local','remote')),
+        FOREIGN KEY(call_id) REFERENCES tc_call_sessions(id) ON DELETE CASCADE
+      )`
     ];
     for (const sql of ddl) await env.DB.prepare(sql).run();
   })().catch(err => { schemaPromise = null; throw err; });
@@ -90,6 +100,15 @@ async function mediaInfo(env, messageId, userId){
   JOIN tc_direct_chats c ON c.id=m.chat_id
   WHERE m.id=? AND (c.user_a=? OR c.user_b=?) LIMIT 1`)
   .bind(id,userId,userId).first();
+}
+function isCallAdmin(env,me){
+  // Admin = akun TemanChat yang sudah ada; tidak membuat password admin bawaan.
+  return !!(env.TC_CALL_ADMIN_EMAIL && me?.email && me.email.toLowerCase()===String(env.TC_CALL_ADMIN_EMAIL).trim().toLowerCase());
+}
+async function remoteApproved(env,me){
+  if(isCallAdmin(env,me))return true;
+  const r=await env.DB.prepare("SELECT state FROM tc_remote_call_access WHERE user_id=?").bind(me.id).first();
+  return r?.state==='approved';
 }
 async function callInfo(env,callId,userId){
  if(!UUID.test(callId))return null;
@@ -232,6 +251,37 @@ export async function handleExtra(request, env, me, deps){
   }
   return bad('Endpoint media tidak tersedia.',404);
  }
+ if(p==='/api/calls/access'&&request.method==='GET'){
+  const admin=isCallAdmin(env,me);
+  const row=await env.DB.prepare('SELECT state,requested_at,reviewed_at FROM tc_remote_call_access WHERE user_id=?').bind(me.id).first();
+  return res({ok:true,admin,adminConfigured:!!String(env.TC_CALL_ADMIN_EMAIL||'').trim(),approved:await remoteApproved(env,me),state:row?.state||'none',requestedAt:row?.requested_at||null});
+ }
+ if(p==='/api/calls/access/request'&&request.method==='POST'){
+  if(isCallAdmin(env,me))return res({ok:true,state:'approved'});
+  if(!String(env.TC_CALL_ADMIN_EMAIL||'').trim())return bad('Admin belum dikonfigurasi oleh pengelola TemanChat.',503);
+  if(!await deps.limit(request,env,'remote-call-request',4,me.id))return bad('Terlalu sering mengajukan. Coba lagi nanti.',429);
+  const existing=await env.DB.prepare('SELECT state FROM tc_remote_call_access WHERE user_id=?').bind(me.id).first();
+  if(existing?.state==='approved'||existing?.state==='pending')return res({ok:true,state:existing.state});
+  await env.DB.prepare(`INSERT INTO tc_remote_call_access(user_id,state,requested_at,reviewed_at,reviewed_by) VALUES(?,'pending',CURRENT_TIMESTAMP,NULL,NULL)
+   ON CONFLICT(user_id) DO UPDATE SET state='pending',requested_at=CURRENT_TIMESTAMP,reviewed_at=NULL,reviewed_by=NULL`).bind(me.id).run();
+  return res({ok:true,state:'pending'});
+ }
+ if(p==='/api/calls/access/requests'&&request.method==='GET'){
+  if(!isCallAdmin(env,me))return bad('Hanya admin panggilan yang dapat melihat pengajuan.',403);
+  const list=await env.DB.prepare(`SELECT a.user_id,a.state,a.requested_at,a.reviewed_at,u.display_name,u.email,u.username
+    FROM tc_remote_call_access a JOIN users u ON u.id=a.user_id ORDER BY CASE a.state WHEN 'pending' THEN 0 ELSE 1 END,a.requested_at DESC LIMIT 100`).all();
+  return res({ok:true,requests:list.results||[]});
+ }
+ if(p==='/api/calls/access/review'&&request.method==='POST'){
+  if(!isCallAdmin(env,me))return bad('Hanya admin panggilan yang dapat menyetujui.',403);
+  if(!await deps.limit(request,env,'remote-call-review',30,me.id))return bad('Terlalu banyak permintaan.',429);
+  const d=await deps.readJSON(request,1500);
+  if(!UUID.test(String(d.userId||''))||!['approved','rejected'].includes(d.state))return bad('Permintaan tidak valid.',400);
+  if(String(d.userId)===me.id)return bad('Tidak perlu mengubah akses admin.',400);
+  const changed=await env.DB.prepare(`UPDATE tc_remote_call_access SET state=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=? WHERE user_id=?`).bind(d.state,me.id,d.userId).run();
+  if(!changed.meta.changes)return bad('Pengajuan tidak ditemukan.',404);
+  return res({ok:true,state:d.state});
+ }
  if(p==='/api/calls/history'&&request.method==='GET'){
   // Status yang masih ringing >30 detik dihitung tak terjawab tanpa perlu menunggu cron.
   // Hanya pemanggil/penerima yang sedang login boleh melihat riwayatnya.
@@ -255,6 +305,14 @@ export async function handleExtra(request, env, me, deps){
   return res({ok:true,calls});
  }
  if(p==='/api/calls/config'&&request.method==='GET'){
+  // Panggilan ditentukan saat dibuat, bukan pilihan browser penerima.
+  const call=await callInfo(env,trimmed(u.searchParams.get('callId')),me.id);
+  if(!call)return bad('Panggilan tidak ditemukan untuk sesi ini.',404);
+  const modeRow=await env.DB.prepare('SELECT mode FROM tc_call_modes WHERE call_id=?').bind(call.id).first();
+  const callMode=modeRow?.mode||'local';
+  if(callMode==='local')return res({ok:true,mode:'local',iceServers:[],turnConfigured:false,turnWarning:''});
+  if(call.status!=='ringing'&&call.status!=='answered')return bad('Panggilan sudah selesai.',409);
+
   const fallback=[{urls:['stun:stun.cloudflare.com:3478','stun:stun.l.google.com:19302']}];
   // Cloudflare Realtime TURN: secret jangka panjang hanya ada di Worker.
   // Browser menerima kredensial sementara untuk satu sesi panggilan.
@@ -282,6 +340,9 @@ export async function handleExtra(request, env, me, deps){
  }
  if(p==='/api/calls/start'&&request.method==='POST'){
   const d=await deps.readJSON(request),chat=await member(env,trimmed(d.conversationId),me.id),kind=trimmed(d.kind);
+  const mode=d.mode==='remote'?'remote':'local';
+  if(d.mode!==undefined&&!['remote','local'].includes(d.mode))return bad('Mode panggilan tidak valid.');
+  if(mode==='remote'&&!await remoteApproved(env,me))return bad('Mode jarak jauh harus disetujui admin terlebih dahulu.',403);
   if(!chat||!['audio','video'].includes(kind))return bad('Percakapan atau jenis panggilan tidak valid.');
   const callee=chat.user_a===me.id?chat.user_b:chat.user_a;
   // Perlindungan panggilan pertama: harus pernah saling mengirim pesan (dua arah).
@@ -296,6 +357,7 @@ export async function handleExtra(request, env, me, deps){
   if(!await deps.limit(request,env,'call-start',8))return bad('Terlalu banyak panggilan. Coba beberapa saat lagi.',429);
   const id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO tc_call_sessions(id,chat_id,caller_id,callee_id,kind) VALUES(?,?,?,?,?)').bind(id,chat.id,me.id,callee,kind).run();
+  await env.DB.prepare('INSERT INTO tc_call_modes(call_id,mode) VALUES(?,?)').bind(id,mode).run();
   deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id},45);
   return res({ok:true,callId:id});
  }

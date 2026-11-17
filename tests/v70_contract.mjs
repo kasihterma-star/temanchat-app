@@ -20,7 +20,7 @@ assert.match(backend,/path==='\/api\/auth\/avatar'\?90000:12000/);
 assert.match(backend,/path\.startsWith\('\/api\/avatar\/'\)/);
 assert.match(css,/tc-avatar-photo/);
 assert.match(css,/tc-call-status-pill/);
-assert.match(sw,/temanchat-v86-auth-recovery/);
+assert.match(sw,/temanchat-v88-admin-badge/);
 assert.match(backend,/CREATE TABLE IF NOT EXISTS tc_pending_email_changes/);
 assert.match(backend,/path==='\/api\/auth\/email-change\/request'/);
 assert.match(backend,/path==='\/api\/auth\/email-change\/confirm'/);

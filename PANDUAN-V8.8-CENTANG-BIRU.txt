@@ -1,0 +1,10 @@
+TemanChat V8.8 — Lencana Admin Resmi Biru
+
+1. Akun @admin sudah berhasil diubah di D1 — jangan ulangi SQL update.
+2. Pastikan TC_CALL_ADMIN_EMAIL di Worker Production sesuai dengan email LOGIN akun @admin (bukan @admin).
+3. Cadangkan repo lama, salin seluruh isi ZIP ini ke repo, Commit dan Push ke GitHub.
+4. Tunggu Cloudflare Ready dan buka ulang PWA (jika cache lama, tutup lalu buka).
+5. Lencana terlihat pada daftar chat, hasil cari, judul percakapan, profil sendiri dan informasi di Pengaturan.
+6. Badge dikirim berdasarkan hak admin yang disahkan server memakai email yang dikonfigurasi, bukan nama/username.
+7. Jika TC_CALL_ADMIN_EMAIL tidak diatur, badge tidak muncul.
+8. Lencana hanya verifikasi internal TemanChat, bukan WhatsApp/Meta.

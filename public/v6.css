@@ -546,3 +546,6 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
   .compose{padding-bottom:calc(9px + env(safe-area-inset-bottom))}
   .tc-install-banner{max-width:calc(100vw - 16px)}
 }
+
+.tc-call-mode-hint{display:block;text-align:center;font-size:12px;line-height:1.45;opacity:.78;padding:5px 14px;max-width:320px;margin:0 auto}
+.tc-call-admin-requests{display:grid;gap:8px}.tc-call-access-item{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:9px;border:1px solid var(--line,rgba(128,128,128,.2));border-radius:12px}.tc-call-access-item small{flex:1 1 100%}
