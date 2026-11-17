@@ -1,0 +1,25 @@
+TemanChat V8.3 FULL — OPTIMASI PANGGILAN SUARA (tahap 1)
+
+Berbasis V8.2. Fitur video belum dioptimalkan pada rilis ini.
+
+PERBAIKAN:
+- Panggilan suara memeriksa sinyal setiap 2,5 detik tanpa mempercepat polling chat.
+- Satu permintaan polling sinyal per panggilan pada satu waktu (menghindari antrian saat jaringan lambat).
+- Pengambilan mikrofon suara dengan echo cancellation, noise suppression, dan auto gain control bila didukung browser.
+- Suara lawan bicara dicoba lagi ketika pengguna menyentuh layar bila autoplay diblokir browser.
+- Koneksi suara yang hanya putus sesaat diberi kesempatan pulih maksimal 12 detik; failed tetap diakhiri.
+- Timer, track mikrofon dan listener per panggilan dibersihkan saat selesai.
+- Fitur video, chat, R2, Google Drive, dan manajemen perangkat tidak diubah perilakunya.
+
+PENTING: Konfigurasi server masih STUN-only. Pada sebagian jaringan seluler, NAT ketat dan firewall, panggilan suara/video TIDAK akan tersambung tanpa TURN relay. Optimasi di atas tidak menggantikan server TURN.
+
+PEMASANGAN:
+1. Cadangkan folder repo temanchat-app.
+2. Ekstrak ZIP dan salin seluruh isinya, pilih Replace.
+3. GitHub Desktop -> Commit -> Push origin.
+4. Periksa Cloudflare Deployments menjadi Ready.
+5. Buka PWA di dua HP; uji Wi-Fi, data seluler, perpindahan jaringan, mute, tutup panggilan dan izin mikrofon.
+6. Jika belum tersambung antarkoneksi berbeda, siapkan layanan TURN; jangan membuat atau membagikan secret lewat GitHub.
+
+CATATAN:
+Kode telah melalui pemeriksaan statis lokal, bukan uji panggilan dua HP secara langsung.

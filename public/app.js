@@ -1160,6 +1160,20 @@ function startCallTone(kind){
   else if(kind==='outgoing'){toneBeep(430,.22,.03)}else if(kind==='ringback'){toneBeep(460,.32,.035);setTimeout(()=>{if(currentCall?.isCaller&&currentCall.ringingConfirmed)toneBeep(460,.32,.035)},520)}};
  play();tcToneLoop=setInterval(play,kind==='incoming'?2600:kind==='ringback'?2700:1900);
 }
+// V8.3: pemantauan koneksi suara terpisah dari refresh chat; video tetap versi V8.2.
+const VOICE_SIGNAL_INTERVAL_MS=2500;
+const VOICE_DISCONNECT_GRACE_MS=12000;
+let voiceSignalTimer=null;
+function stopVoiceSignalTimer(){if(voiceSignalTimer){clearInterval(voiceSignalTimer);voiceSignalTimer=null}}
+function startVoiceSignalTimer(c){
+ stopVoiceSignalTimer();
+ if(c?.kind!=='audio')return;
+ voiceSignalTimer=setInterval(()=>{if(currentCall===c)void pollCall();else stopVoiceSignalTimer()},VOICE_SIGNAL_INTERVAL_MS);
+}
+function clearVoiceDisconnectTimer(c){if(c?.disconnectTimer){clearTimeout(c.disconnectTimer);c.disconnectTimer=null}}
+function detachVoiceResume(c){
+ if(c?.resumeAudio){document.removeEventListener('pointerdown',c.resumeAudio);c.resumeAudio=null}
+}
 // --------- Panggilan suara dan video (WebRTC / signaling D1) ---------
 function durationText(ms){
  const s=Math.max(0,Math.floor(ms/1000));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),sec=s%60;
@@ -1208,6 +1222,9 @@ function stopCallLocally(){
  closeCallPushLocally(c.id);
  if(c.timeoutTimer){clearTimeout(c.timeoutTimer);c.timeoutTimer=null;}
  if(c.durationInterval){clearInterval(c.durationInterval);c.durationInterval=null;}
+ clearVoiceDisconnectTimer(c);
+ detachVoiceResume(c);
+ stopVoiceSignalTimer();
  currentCall=null;
  if(c.pc){c.pc.onicecandidate=null;c.pc.ontrack=null;c.pc.close()}
  c.stream?.getTracks().forEach(t=>t.stop());closeCallUI();
@@ -1220,23 +1237,49 @@ $('muteCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const tr
 $('cameraCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getVideoTracks())track.enabled=!track.enabled;$('cameraCall').querySelector('span').textContent=c.stream.getVideoTracks()[0]?.enabled?'Kamera aktif':'Kamera mati';};
 async function preparePeer(c){
  const opts=await api('/api/calls/config');
- const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:c.kind==='video'});
+ const constraints=c.kind==='audio'
+  ? {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}
+  : {audio:true,video:true};
+ const stream=await navigator.mediaDevices.getUserMedia(constraints);
  if(currentCall!==c){stream.getTracks().forEach(t=>t.stop());return}
  c.stream=stream;c.pc=new RTCPeerConnection({iceServers:opts.iceServers});
  for(const track of stream.getTracks())c.pc.addTrack(track,stream);
  c.pc.ontrack=e=>{
   // Pisahkan elemen audio dan video: pada iPhone suara jangan ikut terhenti saat video disembunyikan.
   const media=c.kind==='video'?$('remoteVideo'):$('remoteAudio');
-  media.srcObject=e.streams[0];
+  media.srcObject=e.streams?.[0]||new MediaStream([e.track]);
+  if(c.kind==='audio'){
+   // Beberapa browser menolak autoplay meski izin mikrofon sudah diberikan.
+   // Coba kembali pada sentuhan pengguna, tanpa membuat listener permanen.
+   media.muted=false;
+   const resume=()=>{if(currentCall===c)void media.play().then(()=>detachVoiceResume(c)).catch(()=>{})};
+   c.resumeAudio=resume;
+   document.addEventListener('pointerdown',resume);
+  }
   $('remoteVideo').style.display=c.kind==='video'?'block':'none';
   $('callRemote').style.display=c.kind==='video'?'none':'flex';
-  media.play().catch(()=>{});
+  media.play().then(()=>{if(c.kind==='audio')detachVoiceResume(c)}).catch(()=>{
+   if(c.kind==='audio'&&currentCall===c)toast('Ketuk layar TemanChat untuk mengaktifkan suara panggilan.');
+  });
  };
  c.pc.onicecandidate=e=>{if(!e.candidate||currentCall!==c)return;post('/api/calls/signal',{callId:c.id,kind:'candidate',payload:JSON.stringify(e.candidate.toJSON())}).catch(console.warn)};
  c.pc.onconnectionstatechange=()=>{
   if(currentCall!==c)return;const state=c.pc.connectionState;
-  if(state==='connected')markCallConnected(c);
-  else if(['failed','closed'].includes(state)){toast('Koneksi panggilan terputus. TURN mungkin diperlukan.');void hangup();}
+  if(state==='connected'){
+   clearVoiceDisconnectTimer(c);
+   markCallConnected(c);
+  }else if(state==='disconnected'&&c.kind==='audio'&&!c.disconnectTimer){
+   // Pemutusan sesaat saat perpindahan Wi-Fi/data jangan langsung mematikan telepon.
+   c.disconnectTimer=setTimeout(()=>{
+    c.disconnectTimer=null;
+    if(currentCall===c&&c.pc?.connectionState==='disconnected'){
+     toast('Koneksi suara tidak pulih. Panggilan diakhiri.');void hangup();
+    }
+   },VOICE_DISCONNECT_GRACE_MS);
+  }else if(['failed','closed'].includes(state)){
+   clearVoiceDisconnectTimer(c);
+   toast('Koneksi panggilan terputus. TURN mungkin diperlukan.');void hangup();
+  }
  };
  if(c.kind==='video'){$('localVideo').srcObject=stream;$('localVideo').style.display='block';}
 }
@@ -1247,7 +1290,8 @@ async function setRemote(c,description){
 }
 async function pollCall(){
  const c=currentCall;
- if(!c)return;
+ if(!c||c.pollBusy)return;
+ c.pollBusy=true;
  try{
   const state=await api('/api/calls/state?callId='+encodeURIComponent(c.id));
   if(currentCall!==c)return;
@@ -1268,6 +1312,7 @@ async function pollCall(){
    }catch(err){console.warn('Call signal',err)}
   }
  }catch(e){console.warn('Call polling',e.message)}
+ finally{c.pollBusy=false}
 }
 async function startCall(kind){
  try{if(tcAudioContext?.state==='suspended')await tcAudioContext.resume()}catch{}
@@ -1285,7 +1330,9 @@ async function startCall(kind){
     if(r.status==='missed'&&currentCall===c){toast('Panggilan tidak dijawab.');stopCallLocally();}
    }catch(e){console.warn('Batas waktu panggilan',e.message)}
   },32000);
-  showCallUI(kind,active.other_name,false,active.other_username);await preparePeer(c);if(currentCall!==c)return;
+  showCallUI(kind,active.other_name,false,active.other_username);
+  startVoiceSignalTimer(c);
+  await preparePeer(c);if(currentCall!==c)return;
   const offer=await c.pc.createOffer();await c.pc.setLocalDescription(offer);
   await post('/api/calls/signal',{callId:c.id,kind:'offer',payload:JSON.stringify(c.pc.localDescription)});
   toast('Panggilan dikirim. Penerima bisa menerima notifikasi push.');
@@ -1301,7 +1348,7 @@ $('acceptCall').onclick=async()=>{
 };
 async function checkIncoming(){
  if(checkingCalls||currentCall||document.hidden||!me)return;checkingCalls=true;
- try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};showCallUI(d.call.kind,d.call.caller_name,true,d.call.caller_username);(notificationsEnabled()&&!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
+ try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};startVoiceSignalTimer(currentCall);showCallUI(d.call.kind,d.call.caller_name,true,d.call.caller_username);(notificationsEnabled()&&!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
  catch(e){console.warn('Incoming call',e.message)}finally{checkingCalls=false}
 }
 let lastKnownCallId=null,callHistoryReady=false,lastHistoryCheck=0;
@@ -1333,10 +1380,10 @@ async function tick(){
   if(document.hidden){
    // Pertahankan signaling saat ada panggilan aktif; saat tidak ada panggilan,
    // notifikasi masuk tetap menjadi tugas Web Push (tanpa polling chat).
-   if(currentCall)await pollCall();
+   if(currentCall&&currentCall.kind!=='audio')await pollCall();
    return;
   }
-  if(currentCall)await pollCall();else await checkIncoming();
+  if(currentCall){if(currentCall.kind!=='audio')await pollCall();}else await checkIncoming();
   if(active)await fetchMessages();
   if(now-lastListUpdate>8000){lastListUpdate=now;await fetchChats()}
  }finally{tickBusy=false}
@@ -1348,7 +1395,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.2'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.3'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
