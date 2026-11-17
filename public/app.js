@@ -1138,8 +1138,15 @@ function closeCallUI(){
  const dlg=$('callDialog');if(dlg.open)dlg.close();$('localVideo').srcObject=null;$('remoteVideo').srcObject=null;$('remoteAudio').srcObject=null;
  $('localVideo').style.display='none';$('remoteVideo').style.display='none';
 }
+function closeCallPushLocally(id){
+ if(!id)return;
+ try{navigator.serviceWorker?.controller?.postMessage({type:'tc-call-close',callId:id});}catch{}
+ void navigator.serviceWorker?.ready?.then(r=>r.active?.postMessage({type:'tc-call-close',callId:id})).catch(()=>{});
+}
 function stopCallLocally(){
  const c=currentCall;if(!c)return;
+ closeCallPushLocally(c.id);
+ if(c.timeoutTimer){clearTimeout(c.timeoutTimer);c.timeoutTimer=null;}
  if(c.durationInterval){clearInterval(c.durationInterval);c.durationInterval=null;}
  currentCall=null;
  if(c.pc){c.pc.onicecandidate=null;c.pc.ontrack=null;c.pc.close()}
@@ -1211,6 +1218,13 @@ async function startCall(kind){
  try{
   const d=await post('/api/calls/start',{conversationId:active.id,kind});
   const c={id:d.callId,kind,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
+  // Batasi panggilan tidak terjawab ~30 detik tanpa menunggu cron 1 menit.
+  c.timeoutTimer=setTimeout(async()=>{
+   if(currentCall!==c||c.connectedAt)return;
+   try{const r=await post('/api/calls/decision',{callId:c.id,action:'timeout'});
+    if(r.status==='missed'&&currentCall===c){toast('Panggilan tidak dijawab.');stopCallLocally();}
+   }catch(e){console.warn('Batas waktu panggilan',e.message)}
+  },32000);
   showCallUI(kind,active.other_name,false,active.other_username);await preparePeer(c);if(currentCall!==c)return;
   const offer=await c.pc.createOffer();await c.pc.setLocalDescription(offer);
   await post('/api/calls/signal',{callId:c.id,kind:'offer',payload:JSON.stringify(c.pc.localDescription)});
@@ -1259,7 +1273,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.9'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.0'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

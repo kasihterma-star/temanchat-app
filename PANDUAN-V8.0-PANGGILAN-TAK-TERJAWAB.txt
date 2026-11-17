@@ -1,0 +1,16 @@
+TemanChat V8.0 — Notifikasi Panggilan Tak Terjawab
+
+Pembaruan dari V7.9 tanpa menghapus Google Drive, logo dan fitur chat.
+
+1. Panggilan masuk mengirim satu push jenis call dengan tag tc-call-ID.
+2. Saat dijawab/ditolak/diakhiri, server mengirim push jenis call_end. Service Worker menutup notifikasi tc-call-ID.
+3. Saat tidak dijawab 30 detik, app penelepon meminta timeout; cron per menit sebagai cadangan, sehingga bila app penelepon tertutup penyelesaian bisa terlambat hingga sekitar 1 menit.
+4. Panggilan yang benar-benar tidak dijawab mengirim notifikasi berbeda bertanda tc-missed-ID, dengan jenis audio/video, nama penelepon, dan tautan ke chat.
+5. Bila penelepon membatalkan sebelum dijawab, penerima juga mendapat notifikasi tak terjawab. Jika penerima menolak, tidak dianggap tak terjawab.
+6. Push tertunda dicek ulang ke status panggilan agar panggilan usang tidak muncul lagi.
+
+BATASAN: Android/Chrome dapat menunda push atau menolak penutupan bila offline, kehabisan baterai, izin notifikasi OFF, atau pembatasan background. Web PWA tidak dapat memaksa sistem memutar nada dering terus-menerus saat tertutup. Notifikasi missed baru dapat muncul bila push terkirim dan izin aktif. Tidak ada panggilan balik langsung dari tombol notifikasi; ketuk notifikasi untuk membuka chat.
+
+INSTAL: Backup repo, ekstrak ZIP ke root repo GitHub, replace semua file, commit, push, pastikan Cloudflare Ready. Setelah update PWA, tutup-buka aplikasi untuk aktivasi Service Worker baru. Tidak perlu mengubah D1/R2/Google Secret.
+
+UJI: akun A menelepon B; biarkan 30 detik; periksa notif missed B. Tes juga A batalkan sebelum dijawab, B jawab, B tolak. Pastikan hanya kasus missed yang menghasilkan notif terpisah.

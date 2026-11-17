@@ -605,11 +605,12 @@ export default {
     if(event.cron==='* * * * *'){
       await ensureExtras(env);
       const missed=await env.DB.prepare(`UPDATE tc_call_sessions SET status='missed',updated_at=CURRENT_TIMESTAMP
-        WHERE status='ringing' AND created_at<datetime('now','-90 seconds')
+        WHERE status='ringing' AND created_at<datetime('now','-30 seconds')
         RETURNING id,callee_id,caller_id,chat_id`).all();
       for(const c of missed.results){
         const caller=await env.DB.prepare('SELECT display_name FROM users WHERE id=?').bind(c.caller_id).first();
-        await sendPush(env,c.callee_id,{title:'Panggilan tak terjawab',body:'Panggilan dari '+(caller?.display_name||'Teman'),url:'/?chat='+c.chat_id,tag:'tc-missed-'+c.id},86400);
+        await sendPush(env,c.callee_id,{kind:'call_end',callId:c.id,tag:'tc-call-'+c.id},60);
+        await sendPush(env,c.callee_id,{kind:'missed_call',callId:c.id,title:'Panggilan tak terjawab',body:'Panggilan dari '+(caller?.display_name||'Teman'),url:'/?chat='+c.chat_id,tag:'tc-missed-'+c.id},86400);
       }
     }else await cleanup(env);
    })());
