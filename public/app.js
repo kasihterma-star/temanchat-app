@@ -1119,7 +1119,7 @@ $('settingsBtn').onclick=()=>{
      const d=await api('/api/calls/access');remoteCallGranted=!!d.approved;
      if(!remoteCallGranted){callMode.value='local';localStorage.setItem(CALL_MODE_KEY,'local');}
      callMode.querySelector('option[value="remote"]').disabled=!d.approved;
-     accessText.textContent=d.admin?'Anda adalah admin panggilan.':d.approved?'Panggilan jarak jauh disetujui.':d.state==='pending'?'Pengajuan menunggu persetujuan admin.':d.state==='rejected'?'Pengajuan sebelumnya ditolak.':'Mode jarak jauh belum diaktifkan.';
+     accessText.textContent=d.admin?'Anda adalah admin panggilan.':d.approved?('Panggilan jarak jauh disetujui'+(d.expiresAt?' hingga '+d.expiresAt+' UTC':' tanpa batas waktu')+'.'):d.state==='pending'?'Pengajuan menunggu persetujuan admin.':d.state==='rejected'?'Izin ditolak atau dicabut.':d.state==='expired'?'Izin sudah kedaluwarsa. Ajukan kembali.':'Mode jarak jauh belum diaktifkan.';
      requestAccess.hidden=!!d.approved||d.state==='pending'||!d.adminConfigured;
      if(!d.adminConfigured)accessText.textContent='Admin panggilan belum dikonfigurasi.';
      if(d.admin)await loadCallRequests();
@@ -1132,10 +1132,24 @@ $('settingsBtn').onclick=()=>{
    if(!d.requests.length){adminRequests.append(element('small','','Belum ada pengajuan.'));return;}
    for(const r of d.requests){
      const item=element('div','tc-call-access-item');
-     item.append(element('small','',`${r.display_name} (@${r.username}) — ${r.state}`));
-     for(const [state,label] of [['approved','Setujui'],['rejected','Tolak / Cabut']]){
+     const labelState={pending:'Menunggu persetujuan',approved:'Diizinkan',rejected:'Ditolak / Dicabut',expired:'Kedaluwarsa'}[r.state]||r.state;
+     item.append(element('small','',`${r.display_name} (@${r.username}) — ${labelState}${r.state==='approved'&&r.expires_at?' sampai '+r.expires_at+' UTC':''}`));
+     const durationSelect=element('select');
+     for(const [value,label] of [['1d','1 hari'],['7d','7 hari'],['30d','30 hari'],['forever','Tanpa batas waktu']]){
+       const opt=element('option','',label);opt.value=value;durationSelect.append(opt);
+     }
+     durationSelect.value='7d';
+     durationSelect.setAttribute('aria-label','Masa berlaku izin');
+     item.append(durationSelect);
+     for(const [state,label] of [['approved','Setujui / Perpanjang'],['rejected',r.state==='approved'?'Cabut Akses':'Tolak / Cabut']]){
        const btn=element('button','tc-media-action',label);btn.type='button';
-       btn.onclick=async()=>{if(!confirm(`${label} akses jarak jauh untuk @${r.username}?`))return;btn.disabled=true;try{await post('/api/calls/access/review',{userId:r.user_id,state});await loadCallRequests();toast('Akses diperbarui.')}catch(e){toast(e.message)}finally{btn.disabled=false}};
+       btn.onclick=async()=>{
+         const duration=state==='approved'?durationSelect.value:'forever';
+         const durLabel=durationSelect.options[durationSelect.selectedIndex]?.textContent||'';
+         if(!confirm(`${label} akses jarak jauh untuk @${r.username}${state==='approved'?' selama '+durLabel:''}?`))return;
+         btn.disabled=true;
+         try{await post('/api/calls/access/review',{userId:r.user_id,state,duration});await loadCallRequests();toast('Akses diperbarui.')}catch(e){toast(e.message)}finally{btn.disabled=false}
+       };
        item.append(btn);
      }
      adminRequests.append(item);
@@ -1472,7 +1486,7 @@ async function init(){
   document.querySelector('.profile small').textContent='@'+me.username;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.8'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.9'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
@@ -1482,7 +1496,13 @@ async function init(){
   }catch(e){console.warn('Preferensi media:',e.message)}
   await fetchChats();
   setTimeout(refreshInstallOffer,1300);
-  const linkedChat=new URLSearchParams(location.search).get('chat');
+  const urlParams=new URLSearchParams(location.search);
+  if(urlParams.get('adminCalls')==='1'&&me?.is_admin){
+    // Tautan dari notifikasi pengajuan langsung membuka menu Pengaturan admin.
+    $('settingsBtn').click();
+    history.replaceState(null,'',location.pathname);
+  }
+  const linkedChat=urlParams.get('chat');
   if(linkedChat&&UUID.test(linkedChat)){const destination=chats.find(c=>c.id===linkedChat);if(destination)void selectChat(destination);}
   void checkPush();
   try{const m=await api('/api/media/config');mediaEnabled=!!m.enabled}catch{mediaEnabled=false}

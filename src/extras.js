@@ -75,6 +75,11 @@ export function ensureExtras(env) {
       )`
     ];
     for (const sql of ddl) await env.DB.prepare(sql).run();
+    // Kompatibilitas database V8.7/V8.8: kolom masa berlaku ditambahkan tanpa menghapus izin lama.
+    const columns=await env.DB.prepare('PRAGMA table_info(tc_remote_call_access)').all();
+    if(!(columns.results||[]).some(col=>col.name==='expires_at')){
+      await env.DB.prepare('ALTER TABLE tc_remote_call_access ADD COLUMN expires_at TEXT').run();
+    }
   })().catch(err => { schemaPromise = null; throw err; });
   return schemaPromise;
 }
@@ -107,8 +112,8 @@ function isCallAdmin(env,me){
 }
 async function remoteApproved(env,me){
   if(isCallAdmin(env,me))return true;
-  const r=await env.DB.prepare("SELECT state FROM tc_remote_call_access WHERE user_id=?").bind(me.id).first();
-  return r?.state==='approved';
+  const r=await env.DB.prepare("SELECT state,expires_at FROM tc_remote_call_access WHERE user_id=?").bind(me.id).first();
+  return r?.state==='approved'&&(!r.expires_at||Date.parse(r.expires_at.replace(' ','T')+'Z')>Date.now());
 }
 async function callInfo(env,callId,userId){
  if(!UUID.test(callId))return null;
@@ -253,22 +258,28 @@ export async function handleExtra(request, env, me, deps){
  }
  if(p==='/api/calls/access'&&request.method==='GET'){
   const admin=isCallAdmin(env,me);
-  const row=await env.DB.prepare('SELECT state,requested_at,reviewed_at FROM tc_remote_call_access WHERE user_id=?').bind(me.id).first();
-  return res({ok:true,admin,adminConfigured:!!String(env.TC_CALL_ADMIN_EMAIL||'').trim(),approved:await remoteApproved(env,me),state:row?.state||'none',requestedAt:row?.requested_at||null});
+  const row=await env.DB.prepare('SELECT state,requested_at,reviewed_at,expires_at FROM tc_remote_call_access WHERE user_id=?').bind(me.id).first();
+  const approved=await remoteApproved(env,me);
+  const expired=!!(row?.state==='approved'&&!approved);
+  return res({ok:true,admin,adminConfigured:!!String(env.TC_CALL_ADMIN_EMAIL||'').trim(),approved,state:expired?'expired':row?.state||'none',requestedAt:row?.requested_at||null,expiresAt:row?.expires_at||null});
  }
  if(p==='/api/calls/access/request'&&request.method==='POST'){
   if(isCallAdmin(env,me))return res({ok:true,state:'approved'});
   if(!String(env.TC_CALL_ADMIN_EMAIL||'').trim())return bad('Admin belum dikonfigurasi oleh pengelola TemanChat.',503);
   if(!await deps.limit(request,env,'remote-call-request',4,me.id))return bad('Terlalu sering mengajukan. Coba lagi nanti.',429);
   const existing=await env.DB.prepare('SELECT state FROM tc_remote_call_access WHERE user_id=?').bind(me.id).first();
-  if(existing?.state==='approved'||existing?.state==='pending')return res({ok:true,state:existing.state});
-  await env.DB.prepare(`INSERT INTO tc_remote_call_access(user_id,state,requested_at,reviewed_at,reviewed_by) VALUES(?,'pending',CURRENT_TIMESTAMP,NULL,NULL)
-   ON CONFLICT(user_id) DO UPDATE SET state='pending',requested_at=CURRENT_TIMESTAMP,reviewed_at=NULL,reviewed_by=NULL`).bind(me.id).run();
+  if(existing?.state==='pending')return res({ok:true,state:'pending'});
+  if(existing?.state==='approved'&&await remoteApproved(env,me))return res({ok:true,state:'approved'});
+  await env.DB.prepare(`INSERT INTO tc_remote_call_access(user_id,state,requested_at,reviewed_at,reviewed_by,expires_at) VALUES(?,'pending',CURRENT_TIMESTAMP,NULL,NULL,NULL)
+   ON CONFLICT(user_id) DO UPDATE SET state='pending',requested_at=CURRENT_TIMESTAMP,reviewed_at=NULL,reviewed_by=NULL,expires_at=NULL`).bind(me.id).run();
+  // Push hanya ketika benar-benar membuat pengajuan baru; tidak dikirim berulang pada refresh.
+  const administrator=await env.DB.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE LIMIT 1').bind(String(env.TC_CALL_ADMIN_EMAIL).trim()).first();
+  if(administrator?.id)deps.sendPush?.(administrator.id,{kind:'call_access_request',title:'TemanChat Admin',body:`${me.display_name||'Pengguna'} (@${me.username}) mengajukan akses panggilan jarak jauh.`,url:'/?adminCalls=1',tag:'tc-admin-call-request-'+me.id},86400);
   return res({ok:true,state:'pending'});
  }
  if(p==='/api/calls/access/requests'&&request.method==='GET'){
   if(!isCallAdmin(env,me))return bad('Hanya admin panggilan yang dapat melihat pengajuan.',403);
-  const list=await env.DB.prepare(`SELECT a.user_id,a.state,a.requested_at,a.reviewed_at,u.display_name,u.email,u.username
+  const list=await env.DB.prepare(`SELECT a.user_id,CASE WHEN a.state='approved' AND a.expires_at IS NOT NULL AND a.expires_at<=datetime('now') THEN 'expired' ELSE a.state END AS state,a.requested_at,a.reviewed_at,a.expires_at,u.display_name,u.email,u.username
     FROM tc_remote_call_access a JOIN users u ON u.id=a.user_id ORDER BY CASE a.state WHEN 'pending' THEN 0 ELSE 1 END,a.requested_at DESC LIMIT 100`).all();
   return res({ok:true,requests:list.results||[]});
  }
@@ -277,10 +288,17 @@ export async function handleExtra(request, env, me, deps){
   if(!await deps.limit(request,env,'remote-call-review',30,me.id))return bad('Terlalu banyak permintaan.',429);
   const d=await deps.readJSON(request,1500);
   if(!UUID.test(String(d.userId||''))||!['approved','rejected'].includes(d.state))return bad('Permintaan tidak valid.',400);
+  const duration=d.duration||'forever';
+  if(!['1d','7d','30d','forever'].includes(duration))return bad('Masa berlaku tidak valid.',400);
   if(String(d.userId)===me.id)return bad('Tidak perlu mengubah akses admin.',400);
-  const changed=await env.DB.prepare(`UPDATE tc_remote_call_access SET state=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=? WHERE user_id=?`).bind(d.state,me.id,d.userId).run();
+  const durationSql={ '1d':'+1 day','7d':'+7 days','30d':'+30 days' };
+  // Durasi hanya berlaku pada persetujuan. Penolakan/pencabutan menghapus expiry.
+  const expiry=d.state==='approved'&&duration!=='forever'?durationSql[duration]:null;
+  const changed=await env.DB.prepare(`UPDATE tc_remote_call_access SET state=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,expires_at=CASE WHEN ? IS NULL THEN NULL ELSE datetime('now',?) END WHERE user_id=?`)
+    .bind(d.state,me.id,expiry,expiry,d.userId).run();
   if(!changed.meta.changes)return bad('Pengajuan tidak ditemukan.',404);
-  return res({ok:true,state:d.state});
+  deps.sendPush?.(d.userId,{kind:'call_access_result',title:'Izin Panggilan TemanChat',body:d.state==='approved'?'Pengajuan panggilan jarak jauh disetujui.':'Izin panggilan jarak jauh ditolak atau dicabut.',url:'/',tag:'tc-call-access-result'},3600);
+  return res({ok:true,state:d.state,duration:d.state==='approved'?duration:null});
  }
  if(p==='/api/calls/history'&&request.method==='GET'){
   // Status yang masih ringing >30 detik dihitung tak terjawab tanpa perlu menunggu cron.
