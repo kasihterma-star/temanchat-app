@@ -507,3 +507,14 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 .tc-drive-connect{display:flex;flex-direction:column;gap:8px;margin:16px 0;padding:14px;border:1px solid var(--line-soft);border-radius:16px;background:var(--accent-soft)}
 .tc-drive-connect small{line-height:1.5;color:var(--muted)}
 .tc-drive-connect button[hidden]{display:none}
+
+/* TemanChat V8.1: sesi perangkat di Pengaturan */
+.tc-device-list{display:flex;flex-direction:column;gap:10px;margin:8px 0 20px}
+.tc-device-item{border:1px solid var(--border,rgba(125,125,125,.3));border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:7px;background:rgba(127,127,127,.055)}
+.tc-device-heading{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.tc-device-current{font-size:.73rem;font-weight:650;padding:4px 8px;border:1px solid currentColor;border-radius:20px;opacity:.85}
+.tc-device-confirm{margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.tc-device-confirm[hidden]{display:none}
+.tc-device-confirm input{width:100%;min-height:42px;border-radius:10px;padding:8px 12px}
+.tc-device-actions{display:flex;flex-wrap:wrap;gap:8px}
+.tc-device-actions button{flex:1;min-width:120px}

@@ -1010,6 +1010,58 @@ $('settingsBtn').onclick=()=>{
  const androidInfo=element('small','','Status aplikasi: '+(runningAsApp()?'PWA terpasang / standalone':'Dibuka di tab browser')+'. Tombol Back sistem Android mengikuti riwayat halaman dan kebijakan Android/Chrome; website tidak dapat memaksa langsung ke Home HP. Tombol kembali TemanChat tetap menuju daftar chat.');
  wrap.append(androidInfo);
  if(!runningAsApp()){const install=element('button','primary','Instal TemanChat');install.onclick=()=>{$('modal').close();void triggerTemanChatInstall()};wrap.append(install);}
+ // V8.1: daftar sesi login pada semua perangkat, bukan izin mengakses perangkat fisik.
+ const deviceTitle=element('label','','Perangkat yang login');
+ const deviceHint=element('small','','Lihat tempat akun masuk, terakhir aktif, dan keluarkan perangkat lain dengan sandi. Nama perangkat diperkirakan dari browser.');
+ const deviceList=element('div','tc-device-list');
+ const refreshDevices=element('button','primary','Perbarui daftar perangkat');
+ const fmtDeviceTime=raw=>{
+   if(!raw)return 'Belum tercatat';
+   const iso=String(raw).replace(' ','T')+(String(raw).includes('Z')||/[+-]\d\d:\d\d$/.test(String(raw))?'':'Z');
+   const t=new Date(iso);return isNaN(t.getTime())?'Belum tercatat':t.toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
+ };
+ async function loadDeviceSessions(){
+   refreshDevices.disabled=true;deviceList.replaceChildren(element('small','','Memuat perangkat…'));
+   try{
+     const d=await api('/api/auth/devices');deviceList.replaceChildren();
+     if(!d.devices?.length){deviceList.append(element('small','','Tidak ada perangkat aktif.'));return}
+     for(const session of d.devices){
+       const item=element('div','tc-device-item');
+       const head=element('div','tc-device-heading');
+       head.append(element('strong','',session.label||'Perangkat lain'));
+       if(session.current)head.append(element('span','tc-device-current','Perangkat ini'));
+       item.append(head,element('small','',`Terakhir aktif: ${fmtDeviceTime(session.lastActiveAt)}`));
+       if(session.createdAt)item.append(element('small','',`Login tercatat: ${fmtDeviceTime(session.createdAt)}`));
+       item.append(element('small','',`Batas sesi: ${fmtDeviceTime(session.expiresAt)}`));
+       if(!session.current){
+         const kick=element('button','tc-media-action','Keluarkan perangkat ini');
+         const authBox=element('div','tc-device-confirm');authBox.hidden=true;
+         const pass=element('input');pass.type='password';pass.autocomplete='current-password';pass.placeholder='Masukkan sandi TemanChat';pass.maxLength=128;
+         pass.setAttribute('aria-label','Sandi untuk mengeluarkan perangkat');
+         const confirm=element('button','primary','Konfirmasi keluarkan');
+         const cancel=element('button','tc-media-action','Batal');
+         const controls=element('div','tc-device-actions');controls.append(confirm,cancel);
+         authBox.append(element('small','','Perangkat ini akan keluar dan harus login ulang.'),pass,controls);
+         kick.onclick=()=>{authBox.hidden=false;kick.hidden=true;pass.focus()};
+         cancel.onclick=()=>{pass.value='';authBox.hidden=true;kick.hidden=false};
+         confirm.onclick=async()=>{
+           if(pass.value.length<8)return toast('Masukkan sandi akun TemanChat.');
+           confirm.disabled=true;
+           try{
+             const result=await post('/api/auth/devices/revoke',{sessionId:session.id,password:pass.value});
+             pass.value='';toast(result.message||'Perangkat berhasil dikeluarkan.');await loadDeviceSessions();
+           }catch(e){pass.value='';toast(e.message)}finally{confirm.disabled=false}
+         };
+         item.append(kick,authBox);
+       }
+       deviceList.append(item);
+     }
+   }catch(e){deviceList.replaceChildren(element('small','','Daftar perangkat gagal dimuat: '+e.message))}
+   finally{refreshDevices.disabled=false}
+ }
+ refreshDevices.onclick=loadDeviceSessions;
+ wrap.append(deviceTitle,deviceHint,refreshDevices,deviceList);
+ void loadDeviceSessions();
  const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{
    try{
     // Jangan biarkan perangkat yang logout menerima push akun sebelumnya.
@@ -1273,7 +1325,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.0'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.1'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

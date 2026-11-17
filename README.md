@@ -59,3 +59,18 @@ Tidak perlu mengubah kunci VAPID, bucket R2, binding `MEDIA`, ataupun membuat ta
 - Suara notifikasi/panggilan saat aplikasi tertutup tetap tunduk pada aturan iOS/Android dan setelan suara sistem. OFF memutus langganan aplikasi; notifikasi yang sudah antre di layanan push mungkin masih dapat muncul sesaat ketika perubahan diterapkan.
 - Pengujian lokal telah mencakup `npm run check`, pemeriksaan otorisasi endpoint fokus, simulasi browser ukuran 390 px dan 1280 px, swipe balas, tampilan perekam, serta aturan mute pesan A/pesan B/panggilan. **Belum diuji langsung di Cloudflare dan iPhone pengguna.**
 - Pengiriman file besar melalui Google Drive, backup Nextcloud otomatis, dan notifikasi panggilan bergaya native tetap memiliki batasan integrasi sebagaimana pada V7.4.
+
+## TemanChat V8.1 — Perangkat yang Login
+
+Dari paket V8.0 FULL, ditambahkan pengelolaan sesi per perangkat dalam Pengaturan:
+
+- Daftar sesi aktif dengan label OS/browser perkiraan, waktu login dan terakhir aktif bila tersedia.
+- Sesi saat ini diberi penanda dan tidak bisa dikeluarkan melalui aksi perangkat lain.
+- Sesi perangkat lain dapat dicabut hanya setelah memasukkan sandi akun yang benar, dengan pembatasan percobaan.
+- Token sesi di server menjadi tidak berlaku segera; sesi perangkat lain dan sandi akun tidak berubah.
+- Langganan push diikat ke sesi yang masih aktif, supaya perangkat yang sesi akunnya dicabut tidak menerima push baru untuk akun tersebut.
+- Dua tabel otomatis: `tc_device_sessions` dan `tc_push_device_links`. Tidak memerlukan migrasi manual.
+
+**Catatan**: Login sebelum V8.1 tidak mempunyai riwayat terakhir aktif historis; akan mulai tercatat setelah perangkat dibuka. Login yang baru dilacak saat login. Nama perangkat dari user-agent hanyalah perkiraan.
+
+Langkah deploy, batasan dan uji perangkat ganda ada di `PANDUAN-V8.1-PERANGKAT-LOGIN.txt`.

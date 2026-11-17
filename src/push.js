@@ -19,7 +19,7 @@ export async function ensurePushSchema(env){
  )`).run().then(()=>env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_tc_push_user ON tc_push_subscriptions(user_id)').run()).then(()=>env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_push_focus (
   subscription_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, chat_id TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
- )`).run()).then(()=>env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_tc_push_focus_user ON tc_push_focus(user_id,chat_id,updated_at)').run()).catch(e=>{schemaPromise=null;throw e});
+ )`).run()).then(()=>env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_tc_push_focus_user ON tc_push_focus(user_id,chat_id,updated_at)').run()).then(()=>env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_push_device_links (subscription_id TEXT PRIMARY KEY,session_id TEXT NOT NULL)`).run()).then(()=>env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_tc_push_links_session ON tc_push_device_links(session_id)').run()).catch(e=>{schemaPromise=null;throw e});
  return schemaPromise;
 }
 function allowedEndpoint(raw){
@@ -47,6 +47,9 @@ export async function pushApi(request,env,me){
   const id=await hexHash(p.endpoint);
   await env.DB.prepare(`INSERT INTO tc_push_subscriptions(id,user_id,endpoint,p256dh,auth) VALUES(?,?,?,?,?)
    ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,p256dh=excluded.p256dh,auth=excluded.auth`).bind(id,me.id,p.endpoint,p.keys.p256dh,p.keys.auth).run();
+  if(!me.session_id)return json({error:'Sesi perangkat tidak ditemukan.'},401);
+  await env.DB.prepare(`INSERT INTO tc_push_device_links(subscription_id,session_id) VALUES(?,?)
+   ON CONFLICT(subscription_id) DO UPDATE SET session_id=excluded.session_id`).bind(id,me.session_id).run();
   // Batas perangkat per akun; hapus yang paling lama agar DB tidak membengkak.
   await env.DB.prepare(`DELETE FROM tc_push_subscriptions WHERE user_id=? AND id NOT IN
   (SELECT id FROM tc_push_subscriptions WHERE user_id=? ORDER BY created_at DESC LIMIT 8)`).bind(me.id,me.id).run();
@@ -76,12 +79,16 @@ export async function pushApi(request,env,me){
   if(!allowedEndpoint(endpoint))return json({error:'Endpoint tidak valid.'},400);
   const sub=await env.DB.prepare('SELECT id FROM tc_push_subscriptions WHERE user_id=? AND endpoint=?').bind(me.id,endpoint).first();
   if(sub)await env.DB.prepare('DELETE FROM tc_push_focus WHERE subscription_id=?').bind(sub.id).run();
+  if(sub)await env.DB.prepare('DELETE FROM tc_push_device_links WHERE subscription_id=?').bind(sub.id).run();
   await env.DB.prepare('DELETE FROM tc_push_subscriptions WHERE user_id=? AND endpoint=?').bind(me.id,endpoint).run();
   return json({enabled:false});
  }
  if(path==='/api/push/test'){
   // Tes hanya ke perangkat sendiri, tidak bisa spam pengguna lain.
-  const row=await env.DB.prepare('SELECT id,endpoint,p256dh,auth FROM tc_push_subscriptions WHERE user_id=? ORDER BY created_at DESC LIMIT 1').bind(me.id).first();
+  const row=await env.DB.prepare(`SELECT s.id,s.endpoint,s.p256dh,s.auth FROM tc_push_subscriptions s
+   JOIN tc_push_device_links l ON l.subscription_id=s.id
+   JOIN sessions sess ON sess.id=l.session_id AND sess.user_id=s.user_id AND sess.revoked_at IS NULL AND sess.expires_at>datetime('now')
+   WHERE s.user_id=? AND sess.id=? ORDER BY s.created_at DESC LIMIT 1`).bind(me.id,me.session_id).first();
   if(!row)return json({error:'Aktifkan notifikasi perangkat dahulu.'},400);
   const ok=await transmit(env,row,{title:'Tes TemanChat',body:'Notifikasi Web Push berhasil diterima!',url:'/',tag:'tc-test'},60);
   return json({sent:ok});
@@ -141,11 +148,16 @@ export async function sendPush(env,userId,payload,ttl=120){
   if(payload?.kind==='message'&&typeof payload.conversationId==='string'){
    const focused=await env.DB.prepare(`SELECT 1 FROM tc_push_focus f
      JOIN tc_push_subscriptions s ON s.id=f.subscription_id AND s.user_id=f.user_id
+     JOIN tc_push_device_links l ON l.subscription_id=s.id
+     JOIN sessions sess ON sess.id=l.session_id AND sess.revoked_at IS NULL AND sess.expires_at>datetime('now')
      WHERE f.user_id=? AND f.chat_id=? AND f.updated_at>=datetime('now','-23 seconds') LIMIT 1`)
     .bind(userId,payload.conversationId).first();
    if(focused)return;
   }
-  const rows=await env.DB.prepare('SELECT id,endpoint,p256dh,auth FROM tc_push_subscriptions WHERE user_id=? LIMIT 8').bind(userId).all();
+  const rows=await env.DB.prepare(`SELECT s.id,s.endpoint,s.p256dh,s.auth FROM tc_push_subscriptions s
+    JOIN tc_push_device_links l ON l.subscription_id=s.id
+    JOIN sessions sess ON sess.id=l.session_id AND sess.user_id=s.user_id AND sess.revoked_at IS NULL AND sess.expires_at>datetime('now')
+    WHERE s.user_id=? LIMIT 8`).bind(userId).all();
   await Promise.allSettled(rows.results.map(r=>transmit(env,r,payload,ttl)));
  }catch(e){console.warn('Web push dispatch',e.message)}
 }

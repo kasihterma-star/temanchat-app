@@ -1,5 +1,6 @@
 import { pushApi, sendPush } from './push.js';
 import { handleGoogle } from './google-drive.js';
+import { logDeviceLogin, touchDevice, listDevices, revokeDevice, ensureDeviceSchema } from './devices.js';
 // TemanChat V6 terpadu: login, chat, media R2 opsional, sinyal WebRTC.
 import { ensureExtras, handleExtra, cleanup } from './extras.js';
 import { ensureReplySchema, validateReply, storeReply } from './replies.js';
@@ -60,7 +61,7 @@ async function makeToken(env,userId,purpose){
 }
 async function userSession(req,env){
   const token=cookie(req,'tc_session');if(!token||!/^[0-9a-f]{64}$/.test(token))return null;
-  return env.DB.prepare('SELECT u.id,u.username,u.email,u.display_name,u.email_verified FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>datetime(\'now\') AND u.email_verified=1 LIMIT 1').bind(await sha(token)).first();
+  return env.DB.prepare('SELECT u.id,u.username,u.email,u.display_name,u.email_verified,s.id AS session_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>datetime(\'now\') AND u.email_verified=1 LIMIT 1').bind(await sha(token)).first();
 }
 const publicUser=u=>({id:u.id,username:u.username,email:u.email,display_name:u.display_name,email_verified:u.email_verified});
 // Foto profil mini (JPEG, maksimal 60 KB per akun). Terpisah dari R2 media chat.
@@ -178,7 +179,7 @@ export default {
     if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.4.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:Boolean(env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET)});
     if(path==='/api/auth/config'&&request.method==='GET')return reply({siteKey:SITE_KEY,authReady:Boolean(env.DB&&env.RESEND_API_KEY&&env.TURNSTILE_SECRET_KEY)});
     if(path==='/api/auth/me'&&request.method==='GET'){
-      const u=await userSession(request,env);return u?reply({ok:true,user:publicUser(u)}):reply({ok:false},401);
+      const u=await userSession(request,env);if(u)await touchDevice(env,u,request.headers.get('User-Agent'));return u?reply({ok:true,user:publicUser(u)}):reply({ok:false},401);
     }
     if(path.startsWith('/api/avatar/')&&request.method==='GET'){
       const me=await userSession(request,env);
@@ -242,8 +243,10 @@ export default {
         const u=await env.DB.prepare('SELECT * FROM users WHERE email=? COLLATE NOCASE LIMIT 1').bind(email).first();
         if(!u||!await verifyPassword(password,u.password_hash))return reply({error:'Email atau password salah.'},401);
         if(!u.email_verified)return reply({error:'Email belum diverifikasi.'},403);
-        const token=random();
-        await env.DB.prepare("INSERT INTO sessions(id,user_id,token_hash,device_name,expires_at) VALUES(?,?,?,?,datetime('now','+30 days'))").bind(crypto.randomUUID(),u.id,await sha(token),clean(d.deviceName).slice(0,80)||'Browser').run();
+        const token=random(),sessionId=crypto.randomUUID();
+        await ensureDeviceSchema(env);
+        await env.DB.prepare("INSERT INTO sessions(id,user_id,token_hash,device_name,expires_at) VALUES(?,?,?,?,datetime('now','+30 days'))").bind(sessionId,u.id,await sha(token),clean(d.deviceName).slice(0,80)||'Browser').run();
+        await logDeviceLogin(env,sessionId,u.id,request.headers.get('User-Agent'));
         const r=reply({ok:true,user:publicUser(u)});r.headers.set('Set-Cookie',sessionCookie(token,30*86400));return r;
       }
       if(path==='/api/auth/forgot'){
@@ -362,12 +365,29 @@ export default {
         await env.DB.prepare('UPDATE users SET display_name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(name,me.id).run();
         return reply({ok:true,user:{...publicUser(me),display_name:name}});
       }
+      if(path==='/api/auth/devices/revoke'){
+        const me=await userSession(request,env);
+        if(!me)return reply({error:'Silakan login kembali.'},401);
+        if(!await limit(request,env,'revoke-device',6,me.id))return reply({error:'Terlalu banyak percobaan. Coba lagi dalam 10 menit.'},429);
+        if(typeof d.password!=='string'||d.password.length<8||d.password.length>128)return reply({error:'Masukkan sandi akun yang benar.'},400);
+        const credentials=await env.DB.prepare('SELECT password_hash FROM users WHERE id=? LIMIT 1').bind(me.id).first();
+        if(!credentials||!await verifyPassword(d.password,credentials.password_hash))return reply({error:'Sandi akun salah.'},403);
+        await ensureDeviceSchema(env);
+        if(!await revokeDevice(env,me,d.sessionId))return reply({error:'Sesi perangkat tidak ditemukan atau sudah keluar. Perbarui daftar.'},404);
+        return reply({ok:true,message:'Perangkat berhasil dikeluarkan. Sesi login perangkat tersebut telah dicabut.'});
+      }
       if(path==='/api/auth/logout'){
         const t=cookie(request,'tc_session');if(t&&/^[0-9a-f]{64}$/.test(t))await env.DB.prepare('UPDATE sessions SET revoked_at=CURRENT_TIMESTAMP WHERE token_hash=?').bind(await sha(t)).run();
         const r=reply({ok:true});r.headers.set('Set-Cookie',sessionCookie('',0));return r;
       }
     }
 
+    if(path==='/api/auth/devices'&&request.method==='GET'){
+      const me=await userSession(request,env);
+      if(!me)return reply({error:'Silakan login kembali.'},401);
+      await touchDevice(env,me,request.headers.get('User-Agent'));
+      return reply({ok:true,devices:await listDevices(env,me)});
+    }
     if(path.startsWith('/api/push/')){
       const me=await userSession(request,env);
       return await pushApi(request,env,me);
@@ -376,6 +396,7 @@ export default {
       const me=await userSession(request,env);
       if(!me)return reply({error:'Silakan masuk kembali.'},401);
       if(!allowOrigin(request))return reply({error:'Origin tidak diizinkan.'},403);
+      await touchDevice(env,me,request.headers.get('User-Agent'));
       await ensurePresenceSchema(env);
       await env.DB.prepare(`INSERT INTO tc_user_presence(user_id,last_active_at)
         VALUES(?,CAST(strftime('%s','now') AS INTEGER))
