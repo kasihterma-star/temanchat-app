@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const r=f=>readFileSync(f,'utf8');
+const home=r('public/index.html'),auth=r('public/auth.html'),app=r('public/app.js'),sw=r('public/sw.js'),share=r('public/share.js'),css=r('public/v6.css');
+assert.match(home,/id="shareAppBtn"/);
+assert.match(auth,/id="shareAuthBtn"/);
+assert.match(home,/<img src="\/icons\/temanchat-logo\.png" alt=""><\/div>/);
+assert.match(home,/\/share\.js\?v=8\.5\.0/);
+assert.match(auth,/\/share\.js\?v=8\.5\.0/);
+assert.match(sw,/temanchat-v85-mobile-share/);
+assert.match(sw,/\/share\.js\?v=8\.5\.0/);
+assert.match(share,/navigator\.share/);
+assert.match(share,/wa\.me\//);
+assert.match(share,/t\.me\/share\/url/);
+assert.match(share,/clipboard/);
+assert.match(app,/shareSettings/);
+assert.match(css,/min-height:44px/);
+console.log('PASS V8.5: berbagi tautan lintas browser, auth dan mobile, cache versi dan banner valid');

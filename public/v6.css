@@ -522,3 +522,27 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 /* V8.2: pesan kesalahan sandi terlihat di dalam dialog perangkat. */
 .tc-device-error:not([hidden]){display:block;color:#dc3545;font-weight:600;margin:.4rem 0;line-height:1.4}
 .tc-device-confirm input[aria-invalid="true"]{outline:2px solid #dc3545;outline-offset:1px}
+
+
+/* V8.5: browser mobile dan PWA memakai target sentuh serta layout yang sama. */
+.tc-share-dialog{border:1px solid var(--line, #d1e2db);border-radius:20px;max-width:min(430px,94vw);width:94vw;max-height:85dvh;overflow:auto;padding:22px;background:var(--surface, #fff);color:var(--strong,#163c35)}
+.tc-share-dialog::backdrop{background:rgba(0,0,0,.55)}
+.tc-share-dialog h2{margin:0 0 7px;font-size:20px}
+.tc-share-dialog p{font-size:13px;line-height:1.5;margin:0 0 14px;color:var(--muted,#667)}
+.tc-share-options{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.tc-share-option{min-width:0;min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;cursor:pointer;border:1px solid var(--line,#d1e2db);border-radius:12px;background:var(--control,#edf4f0);color:var(--strong,#164939);font-size:14px;font-weight:700;font-family:inherit;padding:12px}
+.tc-share-option:focus-visible,.tc-share-close:focus-visible,.tc-share-trigger:focus-visible{outline:2px solid #0b987e;outline-offset:3px}
+.tc-share-status{font-size:13px;line-height:1.6;margin-top:9px;overflow-wrap:anywhere}
+.tc-share-status input{font-size:16px!important;width:100%;margin-top:8px}
+.tc-share-close{width:100%;margin-top:12px;padding:12px;border:0;border-radius:12px;background:var(--control,#edf4f0);color:var(--strong,#164939);font-weight:700;min-height:44px}
+@media(max-width:740px){
+  html,body{height:100%;overscroll-behavior-y:contain}
+  .sidebar-title .round{flex-shrink:0;min-width:42px;min-height:44px;touch-action:manipulation}
+  .sidebar-title h2{min-width:0}
+  .chathead .round,.tc-back{min-width:40px;min-height:43px;touch-action:manipulation}
+  #modal:not(.call-dialog){max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overscroll-behavior:contain}
+  .tc-settings button,.tc-settings select{min-height:44px;touch-action:manipulation}
+  #messageInput,.search input,.tc-settings input{font-size:16px!important}
+  .compose{padding-bottom:calc(9px + env(safe-area-inset-bottom))}
+  .tc-install-banner{max-width:calc(100vw - 16px)}
+}

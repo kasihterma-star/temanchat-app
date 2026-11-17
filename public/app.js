@@ -820,6 +820,7 @@ $('callHistoryBtn').onclick=showCallHistory;
 $('settingsBtn').onclick=()=>{
  modal('Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
+ const shareSettings=element('button','primary','↗ Bagikan TemanChat');shareSettings.type='button';shareSettings.onclick=()=>{ $('modal').close(); window.TCShare?.open(); };wrap.append(shareSettings);
  // Nama tampilan dapat diganti, username login tidak berubah.
  const profileTitle=element('label','','Nama panggilan saya');
  const profileInput=element('input');profileInput.type='text';profileInput.maxLength=60;profileInput.minLength=2;

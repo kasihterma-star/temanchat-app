@@ -11,5 +11,5 @@ assert.match(app,/if\(!document.hidden&&active\)void refreshPartnerTyping\(\)/);
 assert.match(css,/tc-device-error:not\(\[hidden\]\)/);
 assert.match(sw,/const staticAsset=ASSETS.includes/);
 assert.match(sw,/if\(staticAsset\)\{const cached=await caches.match\(request\)/);
-assert.match(sw,/temanchat-v84-turn-drive/);
+assert.match(sw,/temanchat-v85-mobile-share/);
 console.log('PASS V8.2: inline auth errors, non-overlap polling, hidden-tab efficiency, versioned static cache');
