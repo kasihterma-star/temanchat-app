@@ -1,0 +1,20 @@
+TemanChat V7.9 — Perbaikan permintaan getar notifikasi & diagnostik Android
+
+Perubahan:
+- Memperbaiki bug mode "Getar saja" yang sebelumnya mengaktifkan silent:true tanpa pola vibrate.
+- Menambahkan vibrate pattern pada "Suara + Getar" dan "Getar saja".
+- Menambahkan status apakah pengguna membuka PWA standalone atau tab Chrome.
+- Menjelaskan bahwa Back sistem Android tidak dapat diprogram pasti untuk keluar ke Home; riwayat browser/OS menentukan hasil.
+- Tombol Kembali dalam TemanChat tetap bertahap.
+- Cache service worker naik ke V7.9.
+
+Cara uji:
+1. Pasang ZIP menggantikan isi repo dan Push origin; pastikan Cloudflare Ready.
+2. Tutup aplikasi TemanChat seluruhnya lalu buka dari ikon di Home, BUKAN tab Chrome.
+3. Buka Pengaturan TemanChat. Periksa Status aplikasi: PWA terpasang / standalone.
+4. Aktifkan notifikasi, pilih Suara + Getar, tekan Tes getar perangkat; cek apakah HP bergetar.
+5. Jalankan Kirim notifikasi uji dan lihat pemberitahuan yang masuk.
+6. Jika masih tak bergetar, Android Settings -> Apps -> TemanChat / Chrome -> Notifications -> notification channel -> Vibrate, serta mode getar HP.
+7. Tekan tombol Back sistem; jika ke halaman browser lain, berarti masih ada riwayat browser, bukan kegagalan tombol internal.
+
+Penting: Vibration API dan Notifications API tidak dapat memaksa Android bergetar jika hardware, browser, pengaturan mode senyap, atau channel menolak. Tidak ada Web API yang dapat secara andal memaksa tombol Back sistem ke Home launcher.

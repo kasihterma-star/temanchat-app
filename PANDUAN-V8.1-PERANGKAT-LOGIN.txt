@@ -1,0 +1,46 @@
+TEMANCHAT V8.1 FULL — PERANGKAT YANG LOGIN & KELUARKAN DENGAN SANDI
+==================================================================
+Dibuat dari TemanChat V8.0 FULL sebelumnya; semua fitur V8.0 tetap disertakan.
+
+FITUR:
+- Pengaturan > Perangkat yang login.
+- Tampilkan seluruh sesi login aktif pada akun (maksimal 50 sesi pada tampilan).
+- Penanda 'Perangkat ini' untuk sesi yang sedang dipakai.
+- Perkiraan OS dan browser, login tercatat, terakhir aktif, dan batas sesi.
+- Tombol 'Keluarkan perangkat ini' untuk sesi LAIN (tidak untuk sesi saat ini).
+- Wajib mengisi sandi akun TemanChat sebelum perangkat dikeluarkan.
+- Ada pembatasan percobaan per akun dan alamat jaringan untuk mencegah tebak sandi.
+- Cabut sesi dilakukan di server; perangkat yang dicabut harus login ulang.
+- Web Push dikaitkan dengan sesi login sehingga sesi yang dicabut tidak terus menerima push baru.
+
+CARA PASANG:
+1. Cadangkan folder proyek TemanChat pada komputer.
+2. Ekstrak ZIP; salin ISI ZIP ke dalam folder proyek GitHub temanchat-app.
+3. Replace file yang lama; jangan menghapus .git.
+4. GitHub Desktop > Commit ke main > Push origin.
+5. Cloudflare Workers Deployments harus Ready.
+6. Tutup dan buka kembali aplikasi PWA di HP.
+7. Buka Pengaturan > Perangkat yang login.
+
+PENGUJIAN:
+1. Masuk dengan satu akun yang sama di HP Android dan di PC (atau HP kedua).
+2. Buka Pengaturan > Perangkat yang login pada PC.
+3. Pastikan kedua sesi muncul, salah satu bertanda Perangkat ini.
+4. Klik Keluarkan perangkat ini pada sesi HP, masukkan sandi, lalu Konfirmasi.
+5. Di HP, lakukan refresh, buka chat, atau lakukan permintaan baru; HP harus diminta masuk ulang.
+6. Akun pada PC tetap aktif.
+
+PENTING:
+- Perangkat lama yang sudah login sebelum V8.1 dapat tampil tanpa waktu terakhir aktif hingga
+  perangkat tersebut membuka TemanChat lagi. Waktu itu bukan informasi riwayat sebelum V8.1.
+- Nama perangkat hanya perkiraan dari user-agent, bukan identitas/model HP yang pasti.
+- Terakhir aktif diperbarui saat membuka aplikasi dan heartbeat ketika aplikasi terlihat.
+  Tidak melacak aktivitas ketika app tertutup.
+- Setiap sesi berlaku maksimum 30 hari sejak login sesuai kebijakan TemanChat sebelumnya.
+- Saat pertama kali membuka PWA setelah update, aplikasi perlu mendaftarkan ulang langganan
+  push agar terikat pada sesi login. Izinkan notifikasi dan buka app sekali pada tiap device.
+- Tidak mengubah password akun ketika mengeluarkan satu perangkat. Perangkat lain tetap login.
+- Jika lupa sandi, gunakan prosedur reset password yang sudah tersedia.
+- Tidak ada migrasi D1 manual; tabel baru dibuat otomatis oleh Worker.
+- D1/DB, R2/MEDIA, Secrets, Google Drive dan logo lama tidak perlu diganti.
+- Kode dan pengujian otomatis lolos lokal; integrasi langsung pada Cloudflare perlu diuji.

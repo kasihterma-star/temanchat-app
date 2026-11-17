@@ -233,7 +233,7 @@ export async function handleExtra(request, env, me, deps){
   return bad('Endpoint media tidak tersedia.',404);
  }
  if(p==='/api/calls/history'&&request.method==='GET'){
-  // Status yang masih ringing >90 detik dihitung tak terjawab tanpa perlu menunggu cron.
+  // Status yang masih ringing >30 detik dihitung tak terjawab tanpa perlu menunggu cron.
   // Hanya pemanggil/penerima yang sedang login boleh melihat riwayatnya.
   const data=await env.DB.prepare(`SELECT c.id,c.chat_id,c.kind,c.status,c.created_at,c.updated_at,
     c.caller_id,c.callee_id,u.display_name AS other_name,u.username AS other_username,
@@ -242,7 +242,7 @@ export async function handleExtra(request, env, me, deps){
       ON u.id=CASE WHEN c.caller_id=? THEN c.callee_id ELSE c.caller_id END
     WHERE c.caller_id=? OR c.callee_id=?
     ORDER BY c.created_at DESC LIMIT 60`).bind(me.id,me.id,me.id).all();
-  const cutoff=Date.now()-90000;
+  const cutoff=Date.now()-30000;
   const calls=(data.results||[]).map(c=>{
     const stale=c.status==='ringing'&&Date.parse(String(c.created_at).replace(' ','T')+'Z')<cutoff;
     const noAnswer=c.status==='ended'&&!Number(c.has_answer);
@@ -271,13 +271,13 @@ export async function handleExtra(request, env, me, deps){
   if(!await deps.limit(request,env,'call-start',8))return bad('Terlalu banyak panggilan. Coba beberapa saat lagi.',429);
   const id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO tc_call_sessions(id,chat_id,caller_id,callee_id,kind) VALUES(?,?,?,?,?)').bind(id,chat.id,me.id,callee,kind).run();
-  deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id},120);
+  deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id},45);
   return res({ok:true,callId:id});
  }
  if(p==='/api/calls/incoming'&&request.method==='GET'){
   const r=await env.DB.prepare(`SELECT c.id,c.chat_id,c.kind,u.display_name AS caller_name,u.username AS caller_username
     FROM tc_call_sessions c JOIN users u ON u.id=c.caller_id
-    WHERE c.callee_id=? AND c.status='ringing' AND c.created_at>datetime('now','-90 seconds')
+    WHERE c.callee_id=? AND c.status='ringing' AND c.created_at>datetime('now','-30 seconds')
     ORDER BY c.created_at DESC LIMIT 1`).bind(me.id).first();
   if(r){
     await env.DB.prepare(`CREATE TABLE IF NOT EXISTS tc_call_delivery (call_id TEXT PRIMARY KEY,callee_id TEXT NOT NULL,received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`).run();
@@ -306,12 +306,40 @@ export async function handleExtra(request, env, me, deps){
  }
  if(p==='/api/calls/decision'&&request.method==='POST'){
   const d=await deps.readJSON(request),call=await callInfo(env,trimmed(d.callId),me.id),decision=trimmed(d.action);
-  if(!call||!['answer','reject','hangup'].includes(decision))return bad('Panggilan tidak ditemukan.',404);
+  if(!call||!['answer','reject','hangup','timeout'].includes(decision))return bad('Panggilan tidak ditemukan.',404);
   if(decision==='answer'&&call.callee_id!==me.id)return bad('Hanya penerima yang boleh menjawab.',403);
-  const status=decision==='answer'?'answered':decision==='reject'?'declined':'ended';
-  if(decision==='answer')await env.DB.prepare("UPDATE tc_call_sessions SET status='answered',updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='ringing'").bind(call.id).run();
-  else await env.DB.prepare("UPDATE tc_call_sessions SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('ringing','answered')").bind(status,call.id).run();
-  return res({ok:true,status});
+  if(decision==='reject'&&call.callee_id!==me.id)return bad('Hanya penerima yang boleh menolak.',403);
+  if(decision==='timeout'&&call.caller_id!==me.id)return bad('Hanya penelepon yang boleh mengakhiri waktu tunggu.',403);
+  if(decision==='timeout'&&call.status==='ringing'){
+   const eligible=await env.DB.prepare("SELECT 1 AS yes FROM tc_call_sessions WHERE id=? AND created_at<=datetime('now','-30 seconds')").bind(call.id).first();
+   if(!eligible)return bad('Waktu tunggu belum berakhir.',409);
+  }
+  // UPDATE atomik: jangan sampai push "tak terjawab" terkirim dua kali atau sesudah dijawab.
+  let status,changed;
+  if(decision==='answer'){
+   status='answered';changed=await env.DB.prepare("UPDATE tc_call_sessions SET status='answered',updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='ringing' RETURNING id").bind(call.id).first();
+  }else if(decision==='reject'){
+   status='declined';changed=await env.DB.prepare("UPDATE tc_call_sessions SET status='declined',updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='ringing' RETURNING id").bind(call.id).first();
+  }else if(decision==='timeout'){
+   status='missed';changed=await env.DB.prepare("UPDATE tc_call_sessions SET status='missed',updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='ringing' RETURNING id").bind(call.id).first();
+  }else{
+   // Penelepon menutup panggilan yang belum dijawab: tak terjawab di sisi penerima.
+   // Penerima menutup sebelum menjawab: ditolak; panggilan aktif: berakhir.
+   status=call.status==='ringing'?(me.id===call.caller_id?'missed':'declined'):'ended';
+   changed=await env.DB.prepare(`UPDATE tc_call_sessions SET status=CASE WHEN status='ringing' THEN ? ELSE 'ended' END,updated_at=CURRENT_TIMESTAMP
+    WHERE id=? AND status IN ('ringing','answered') RETURNING status`).bind(status,call.id).first();
+   if(changed)status=changed.status;
+  }
+  if(changed){
+   deps.sendPush?.(call.callee_id,{kind:'call_end',callId:call.id,tag:'tc-call-'+call.id},60);
+   if(status==='missed'){
+    const caller=await env.DB.prepare('SELECT display_name FROM users WHERE id=?').bind(call.caller_id).first();
+    deps.sendPush?.(call.callee_id,{kind:'missed_call',callId:call.id,
+      title:call.kind==='video'?'Panggilan video tak terjawab':'Panggilan suara tak terjawab',
+      body:(caller?.display_name||'Teman')+' menelepon Anda',url:'/?chat='+call.chat_id,tag:'tc-missed-'+call.id},86400);
+   }
+  }
+  return res({ok:true,status:changed?status:call.status,changed:!!changed});
  }
  if(p==='/api/calls/signal'&&request.method==='POST'){
   const d=await deps.readJSON(request,60000),call=await callInfo(env,trimmed(d.callId),me.id);
@@ -336,7 +364,7 @@ export async function cleanup(env){
  await env.DB.prepare("DELETE FROM auth_tokens WHERE expires_at<datetime('now','-1 day')").run();
  await env.DB.prepare("DELETE FROM auth_rate_limits WHERE created_at<datetime('now','-2 days')").run();
  await env.DB.prepare("DELETE FROM tc_call_signals WHERE created_at<datetime('now','-2 days')").run();
- await env.DB.prepare("UPDATE tc_call_sessions SET status='missed' WHERE status='ringing' AND created_at<datetime('now','-90 seconds')").run();
+ // Penandaan tak terjawab hanya oleh cron menit yang mengirim push tepat sekali.
  if(!env.MEDIA)return;
  const expired=await env.DB.prepare(`SELECT f.id,f.object_key FROM tc_media_items f
    LEFT JOIN tc_media_links l ON l.media_id=f.id

@@ -41,7 +41,8 @@ const seenChatLast=new Map();
 function notifySupported(){return 'Notification' in window&&window.isSecureContext}
 async function notifyLocal(title,body,tag){
  if(!notificationsEnabled()||!notifySupported()||Notification.permission!=='granted')return false;
- const options={body,tag,icon:'/icons/icon-192.png',renotify:true};
+ const mode=notificationMode();
+ const options={body,tag,icon:'/icons/icon-192.png',renotify:true,...notificationStyle(mode)};
  // Hindari serviceWorker.ready yang dapat menggantung sebelum worker aktif.
  try{
   if('serviceWorker' in navigator){
@@ -61,7 +62,27 @@ async function notifyLocal(title,body,tag){
 let serverPushEnabled=false,serverPushEndpoint='';
 const NOTIFY_PREF='tc_notifications_enabled';
 const notificationsEnabled=()=>localStorage.getItem(NOTIFY_PREF)!=='off';
-const audioPreference=()=>notificationsEnabled()&&localStorage.getItem('tc_call_sounds')!=='off';
+const NOTIFY_MODE_KEY='tc_notification_mode_v78'; // tetap memakai preferensi versi terdahulu
+const notificationMode=()=>{
+ const mode=localStorage.getItem(NOTIFY_MODE_KEY)||'both';
+ return ['both','sound','vibrate','silent'].includes(mode)?mode:'both';
+};
+const notificationStyle=mode=>({
+ // silent:true tidak boleh digabung dengan vibrate pada Notifications API.
+ // Getar saja adalah permintaan tanpa suara dari aplikasi, tetapi OS yang mengatur bunyi channel.
+ silent:mode==='silent',
+ ...(['both','vibrate'].includes(mode)?{vibrate:[180,90,180]}:{})
+});
+const soundAllowed=()=>['both','sound'].includes(notificationMode());
+const vibrationAllowed=()=>notificationsEnabled()&&['both','vibrate'].includes(notificationMode());
+const audioPreference=()=>notificationsEnabled()&&soundAllowed()&&localStorage.getItem('tc_call_sounds')!=='off';
+function syncNotificationModeWorker(){
+ try{const mode=notificationMode();if(navigator.serviceWorker?.controller)navigator.serviceWorker.controller.postMessage({type:'tc-notification-mode',mode});
+  void navigator.serviceWorker?.ready?.then(reg=>{reg.active?.postMessage({type:'tc-notification-mode',mode})}).catch(()=>{});
+ }catch(e){console.warn('Preferensi notifikasi ke SW',e)}
+}
+function vibrateForCall(){if(vibrationAllowed()&&typeof navigator.vibrate==='function'&&!document.hidden)navigator.vibrate([220,120,220,120,350])}
+
 // Smart Notification: jangan membunyikan notifikasi hanya bila chat yang sama
 // benar-benar terlihat dan sedang menjadi layar utama pengguna.
 const visibleChatId=()=>{
@@ -929,6 +950,20 @@ $('settingsBtn').onclick=()=>{
  driveGroup.append(driveState,connect,disconnect);
  wrap.append(driveGroup);void refreshDrive();
  wrap.append(element('small','','Simpan permanen ke Nextcloud memerlukan konektor server tambahan. Tidak dianggap sudah tersimpan sebelum konektor benar-benar tersedia.'));
+ // Mode lokal per perangkat, dikirim ke Service Worker agar push ketika aplikasi tertutup
+ // tetap menghormati pilihan bila browser mendukung properti silent/vibrate.
+ const modeTitle=element('label','','Mode notifikasi pesan dan panggilan');
+ const modeSelect=element('select','tc-notify-mode');
+ for(const [value,label] of [['both','🔔 Suara + Getar'],['sound','🔊 Suara saja'],['vibrate','📳 Getar saja'],['silent','🔕 Senyap (visual saja)']]){
+  const option=element('option','',label);option.value=value;modeSelect.append(option);
+ }
+ modeSelect.value=notificationMode();modeSelect.setAttribute('aria-label','Mode suara dan getar notifikasi');
+ const modeHelp=element('small','','Android/Chrome menentukan suara dan getar push melalui kanal notifikasi sistem. Mode Getar saja meminta pola getar, tetapi tidak bisa memaksa HP senyap. Periksa Pengaturan Android → Aplikasi → TemanChat/Chrome → Notifikasi → Getar.');
+ modeSelect.onchange=()=>{localStorage.setItem(NOTIFY_MODE_KEY,modeSelect.value);syncNotificationModeWorker();
+   if(!audioPreference())stopCallTone();toast('Mode notifikasi disimpan di perangkat ini.');
+   toneButton.textContent=audioPreference()?'Suara panggilan: Aktif':'Suara panggilan: Nonaktif';
+ };
+ wrap.append(modeTitle,modeSelect,modeHelp);
  const notifyButton=element('button','primary','Memeriksa notifikasi…');
  const showPushState=async()=>{
    // Perhatikan pengaturan pengguna, bukan hanya apakah Web Push tersedia.
@@ -950,7 +985,7 @@ $('settingsBtn').onclick=()=>{
       if(navigator.clearAppBadge)void navigator.clearAppBadge().catch(()=>{});
       toast('Semua notifikasi dan bunyi panggilan TemanChat dimatikan pada perangkat ini.');
     }else{
-      await registerPush();localStorage.setItem(NOTIFY_PREF,'on');updateNotificationFocus(true);
+      await registerPush();localStorage.setItem(NOTIFY_PREF,'on');syncNotificationModeWorker();updateNotificationFocus(true);
       toast('Notifikasi TemanChat diaktifkan pada perangkat ini.');
     }
   }catch(e){toast('Pengaturan notifikasi gagal: '+e.message)}
@@ -964,7 +999,69 @@ $('settingsBtn').onclick=()=>{
  const pushTest=element('button','primary','Kirim notifikasi uji');
  pushTest.onclick=async()=>{if(!notificationsEnabled())return toast('Aktifkan notifikasi dahulu.');try{const d=await post('/api/push/test',{});toast(d.sent?'Tes terkirim. Cek notifikasi perangkat.':'Push ditolak penyedia. Periksa Log Cloudflare.')}catch(e){toast(e.message)}};
  wrap.append(pushTest);
+ const vibrateTest=element('button','tc-media-action','Tes getar perangkat');
+ vibrateTest.onclick=()=>{
+  if(!notificationsEnabled())return toast('Notifikasi sedang OFF.');
+  if(!vibrationAllowed())return toast('Pilih Suara + Getar atau Getar saja terlebih dahulu.');
+  if(typeof navigator.vibrate!=='function')return toast('Browser/perangkat ini tidak mendukung getaran dari website.');
+  const ok=navigator.vibrate([180,120,270,120,180]);toast(ok?'Perintah getar diterima browser (belum menjamin motor HP bergetar). Cek pengaturan getar Android.':'Perangkat/browser menolak perintah getar.');
+ };
+ wrap.append(vibrateTest);
+ const androidInfo=element('small','','Status aplikasi: '+(runningAsApp()?'PWA terpasang / standalone':'Dibuka di tab browser')+'. Tombol Back sistem Android mengikuti riwayat halaman dan kebijakan Android/Chrome; website tidak dapat memaksa langsung ke Home HP. Tombol kembali TemanChat tetap menuju daftar chat.');
+ wrap.append(androidInfo);
  if(!runningAsApp()){const install=element('button','primary','Instal TemanChat');install.onclick=()=>{$('modal').close();void triggerTemanChatInstall()};wrap.append(install);}
+ // V8.1: daftar sesi login pada semua perangkat, bukan izin mengakses perangkat fisik.
+ const deviceTitle=element('label','','Perangkat yang login');
+ const deviceHint=element('small','','Lihat tempat akun masuk, terakhir aktif, dan keluarkan perangkat lain dengan sandi. Nama perangkat diperkirakan dari browser.');
+ const deviceList=element('div','tc-device-list');
+ const refreshDevices=element('button','primary','Perbarui daftar perangkat');
+ const fmtDeviceTime=raw=>{
+   if(!raw)return 'Belum tercatat';
+   const iso=String(raw).replace(' ','T')+(String(raw).includes('Z')||/[+-]\d\d:\d\d$/.test(String(raw))?'':'Z');
+   const t=new Date(iso);return isNaN(t.getTime())?'Belum tercatat':t.toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
+ };
+ async function loadDeviceSessions(){
+   refreshDevices.disabled=true;deviceList.replaceChildren(element('small','','Memuat perangkat…'));
+   try{
+     const d=await api('/api/auth/devices');deviceList.replaceChildren();
+     if(!d.devices?.length){deviceList.append(element('small','','Tidak ada perangkat aktif.'));return}
+     for(const session of d.devices){
+       const item=element('div','tc-device-item');
+       const head=element('div','tc-device-heading');
+       head.append(element('strong','',session.label||'Perangkat lain'));
+       if(session.current)head.append(element('span','tc-device-current','Perangkat ini'));
+       item.append(head,element('small','',`Terakhir aktif: ${fmtDeviceTime(session.lastActiveAt)}`));
+       if(session.createdAt)item.append(element('small','',`Login tercatat: ${fmtDeviceTime(session.createdAt)}`));
+       item.append(element('small','',`Batas sesi: ${fmtDeviceTime(session.expiresAt)}`));
+       if(!session.current){
+         const kick=element('button','tc-media-action','Keluarkan perangkat ini');
+         const authBox=element('div','tc-device-confirm');authBox.hidden=true;
+         const pass=element('input');pass.type='password';pass.autocomplete='current-password';pass.placeholder='Masukkan sandi TemanChat';pass.maxLength=128;
+         pass.setAttribute('aria-label','Sandi untuk mengeluarkan perangkat');
+         const confirm=element('button','primary','Konfirmasi keluarkan');
+         const cancel=element('button','tc-media-action','Batal');
+         const controls=element('div','tc-device-actions');controls.append(confirm,cancel);
+         authBox.append(element('small','','Perangkat ini akan keluar dan harus login ulang.'),pass,controls);
+         kick.onclick=()=>{authBox.hidden=false;kick.hidden=true;pass.focus()};
+         cancel.onclick=()=>{pass.value='';authBox.hidden=true;kick.hidden=false};
+         confirm.onclick=async()=>{
+           if(pass.value.length<8)return toast('Masukkan sandi akun TemanChat.');
+           confirm.disabled=true;
+           try{
+             const result=await post('/api/auth/devices/revoke',{sessionId:session.id,password:pass.value});
+             pass.value='';toast(result.message||'Perangkat berhasil dikeluarkan.');await loadDeviceSessions();
+           }catch(e){pass.value='';toast(e.message)}finally{confirm.disabled=false}
+         };
+         item.append(kick,authBox);
+       }
+       deviceList.append(item);
+     }
+   }catch(e){deviceList.replaceChildren(element('small','','Daftar perangkat gagal dimuat: '+e.message))}
+   finally{refreshDevices.disabled=false}
+ }
+ refreshDevices.onclick=loadDeviceSessions;
+ wrap.append(deviceTitle,deviceHint,refreshDevices,deviceList);
+ void loadDeviceSessions();
  const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{
    try{
     // Jangan biarkan perangkat yang logout menerima push akun sebelumnya.
@@ -1085,6 +1182,7 @@ function showCallUI(kind,name,incoming,username){
  $('callRemote').style.display='flex';$('callAvatar').style.display='grid';$('remoteVideo').style.display='none';$('localVideo').style.display='none';
  $('acceptCall').hidden=!incoming;$('cameraCall').hidden=kind!=='video';callLabel(incoming?'Panggilan masuk…':'Memanggil…');
  if(!dlg.open)dlg.showModal();
+ if(!currentCall?.isCaller)vibrateForCall();
  startCallTone(incoming?'incoming':'outgoing');
 }
 function closeCallUI(){
@@ -1092,8 +1190,15 @@ function closeCallUI(){
  const dlg=$('callDialog');if(dlg.open)dlg.close();$('localVideo').srcObject=null;$('remoteVideo').srcObject=null;$('remoteAudio').srcObject=null;
  $('localVideo').style.display='none';$('remoteVideo').style.display='none';
 }
+function closeCallPushLocally(id){
+ if(!id)return;
+ try{navigator.serviceWorker?.controller?.postMessage({type:'tc-call-close',callId:id});}catch{}
+ void navigator.serviceWorker?.ready?.then(r=>r.active?.postMessage({type:'tc-call-close',callId:id})).catch(()=>{});
+}
 function stopCallLocally(){
  const c=currentCall;if(!c)return;
+ closeCallPushLocally(c.id);
+ if(c.timeoutTimer){clearTimeout(c.timeoutTimer);c.timeoutTimer=null;}
  if(c.durationInterval){clearInterval(c.durationInterval);c.durationInterval=null;}
  currentCall=null;
  if(c.pc){c.pc.onicecandidate=null;c.pc.ontrack=null;c.pc.close()}
@@ -1165,6 +1270,13 @@ async function startCall(kind){
  try{
   const d=await post('/api/calls/start',{conversationId:active.id,kind});
   const c={id:d.callId,kind,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
+  // Batasi panggilan tidak terjawab ~30 detik tanpa menunggu cron 1 menit.
+  c.timeoutTimer=setTimeout(async()=>{
+   if(currentCall!==c||c.connectedAt)return;
+   try{const r=await post('/api/calls/decision',{callId:c.id,action:'timeout'});
+    if(r.status==='missed'&&currentCall===c){toast('Panggilan tidak dijawab.');stopCallLocally();}
+   }catch(e){console.warn('Batas waktu panggilan',e.message)}
+  },32000);
   showCallUI(kind,active.other_name,false,active.other_username);await preparePeer(c);if(currentCall!==c)return;
   const offer=await c.pc.createOffer();await c.pc.setLocalDescription(offer);
   await post('/api/calls/signal',{callId:c.id,kind:'offer',payload:JSON.stringify(c.pc.localDescription)});
@@ -1213,7 +1325,7 @@ async function init(){
   document.querySelector('.profile b').textContent=me.display_name;
   document.querySelector('.profile small').textContent='@'+me.username;
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V7.5'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V8.1'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
@@ -1241,7 +1353,13 @@ window.addEventListener('blur',leaveNotificationFocus);
 window.addEventListener('focus',()=>updateNotificationFocus(true));
 window.addEventListener('pagehide',leaveNotificationFocus);
 window.addEventListener('focus',()=>{if(Date.now()-lastPresenceBeat>PRESENCE_PING_MS)void heartbeatPresence()});
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(console.warn));
+if('serviceWorker' in navigator){
+ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').then(syncNotificationModeWorker).catch(console.warn));
+ navigator.serviceWorker.addEventListener('controllerchange',syncNotificationModeWorker);
+}
+// V7.9: tidak menambahkan pushState atau intercept popstate. Tombol Kembali
+// bawaan Android tetap milik browser/OS, bukan dipaksa kembali ke daftar chat.
+// Tombol Kembali internal (#backBtn), tombol tutup dialog, tetap bekerja bertahap.
 // Mode tema dapat langsung diubah tanpa masuk ke Pengaturan.
 document.querySelectorAll('[data-tc-theme]').forEach(button=>{
  button.addEventListener('click',()=>applyTheme(button.dataset.tcTheme));
