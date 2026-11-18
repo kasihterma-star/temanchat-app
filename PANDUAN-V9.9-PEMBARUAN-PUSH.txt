@@ -1,0 +1,12 @@
+TemanChat V9.9 BETA — Pembaruan PWA aman & push lintas-versi
+
+- Saat aplikasi terlihat, pemeriksaan pembaruan SW maksimal setiap 10 menit; juga saat tab kembali aktif.
+- Worker baru aktif dan halaman memuat ulang saat aman: bukan ketika panggilan berjalan atau teks belum dikirim.
+- Perangkat yang tertutup total tidak dapat dipaksa mengunduh pembaruan sampai browser/OS menjalankannya.
+- Mulai dari V9.9, pembaruan berikutnya dapat diterapkan otomatis saat perangkat membuka/mengaktifkan aplikasi.
+- Pengguna V9.8 dan sebelumnya mungkin perlu refresh/buka ulang satu kali untuk memasang mekanisme baru ini.
+- Push lama tetap bekerja selama izin, session, subscription aktif, dan OS mengizinkan; tidak tergantung label versi UI.
+- Saat subscription berubah, service worker mencoba mendaftarkan ulang ke backend; jika gagal akan dicoba lagi saat app dibuka.
+- Tidak menjamin push saat perangkat offline, pembatasan baterai/background, atau OS menghentikan browser.
+- Tidak ada migrasi D1 atau perubahan secret Cloudflare.
+- Jangan hapus basis data atau unsubscribe push saat upgrade.

@@ -944,7 +944,7 @@ $('settingsBtn').onclick=()=>{
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
  const aboutBtn=element('button','tc-media-action tc-about-entry','ⓘ Tentang TemanChat · Versi 9.8');
  aboutBtn.type='button';aboutBtn.onclick=()=>{
-  modal('Tentang TemanChat V9.8','PWA TemanChat untuk pesan, panggilan suara, dan video.');
+  modal('Tentang TemanChat V9.9','PWA TemanChat untuk pesan, panggilan suara, dan video.');
   const c=$('modalContent');
   c.append(element('p','tc-about-paragraph','Panggilan masuk memakai Web Push dan dapat mengirim maksimal empat pengingat selama belum dijawab. Notifikasi bisa dipengaruhi pengaturan izin, baterai, atau kebijakan perangkat.'));
   c.append(element('p','tc-about-paragraph','Mode Otomatis saat akses disetujui memakai relay TURN seperti Mode Jarak Jauh. Mode Lokal tetap bisa dipilih manual dari Pengaturan.'));
@@ -1745,7 +1745,7 @@ async function init(){
   if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.8'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.9'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
@@ -1779,9 +1779,58 @@ window.addEventListener('blur',leaveNotificationFocus);
 window.addEventListener('focus',()=>updateNotificationFocus(true));
 window.addEventListener('pagehide',leaveNotificationFocus);
 window.addEventListener('focus',()=>{if(Date.now()-lastPresenceBeat>PRESENCE_PING_MS)void heartbeatPresence()});
+// V9.9: update ringan dan aman saat PWA aktif; tidak menginterupsi VC atau draft pesan.
+// Service worker tidak dapat memaksa browser yang tidak dijalankan untuk mengunduh JS baru.
+let tcNewWorkerReady=false, tcLastWorkerCheck=0, tcUpdateTimer=null;
+const tcHadControllerAtLoad=Boolean(navigator.serviceWorker?.controller);
+const tcCanApplyUpdate=()=>!currentCall && !callBusy && !quickCallBusy &&
+ !document.hidden && document.visibilityState==='visible' &&
+ !($('messageInput')?.value||'').trim() && !document.querySelector('.tc-voice-panel:not([hidden])');
+function tcApplyUpdateSafely(){
+ if(!tcNewWorkerReady)return;
+ if(!tcCanApplyUpdate()){
+  if(!tcUpdateTimer)tcUpdateTimer=setTimeout(()=>{tcUpdateTimer=null;tcApplyUpdateSafely()},15000);
+  return;
+ }
+ // Simpan posisi navigasi hanya melalui browser, bukan isi pesan/pribadi.
+ tcNewWorkerReady=false;
+ window.location.reload();
+}
+async function tcCheckForUpdate(force=false){
+ if(!('serviceWorker' in navigator))return;
+ if(!force && Date.now()-tcLastWorkerCheck<10*60*1000)return;
+ tcLastWorkerCheck=Date.now();
+ try{
+  const reg=await navigator.serviceWorker.getRegistration('/');
+  if(!reg)return;
+  if(reg.waiting){tcNewWorkerReady=true;tcApplyUpdateSafely();return;}
+  await reg.update();
+ }catch(e){console.warn('Pemeriksaan pembaruan:',e?.message||e)}
+}
 if('serviceWorker' in navigator){
- window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').then(syncNotificationModeWorker).catch(console.warn));
- navigator.serviceWorker.addEventListener('controllerchange',syncNotificationModeWorker);
+ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).then(reg=>{
+  syncNotificationModeWorker();
+  reg.addEventListener('updatefound',()=>{
+   const installing=reg.installing;
+   installing?.addEventListener('statechange',()=>{
+    if(installing.state==='installed'&&navigator.serviceWorker.controller){
+     tcNewWorkerReady=true;tcApplyUpdateSafely();
+    }
+   });
+  });
+  void tcCheckForUpdate(true);
+ }).catch(console.warn));
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{
+  syncNotificationModeWorker();
+  // Bila worker baru mengambil alih saat tab masih terbuka, muat ulang saat aman.
+  if(tcHadControllerAtLoad){tcNewWorkerReady=true;tcApplyUpdateSafely()}
+ });
+ document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden){void tcCheckForUpdate();tcApplyUpdateSafely()}
+ });
+ window.addEventListener('focus',()=>{void tcCheckForUpdate();tcApplyUpdateSafely()});
+ // Periksa berkala HANYA ketika aplikasi terlihat; tidak menambah polling server chat.
+ setInterval(()=>{if(!document.hidden)void tcCheckForUpdate()},10*60*1000);
 }
 // V7.9: tidak menambahkan pushState atau intercept popstate. Tombol Kembali
 // bawaan Android tetap milik browser/OS, bukan dipaksa kembali ke daftar chat.

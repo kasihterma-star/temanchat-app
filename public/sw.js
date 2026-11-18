@@ -1,6 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-const CACHE='temanchat-v98-settings-profile-navigation';
-const ASSETS=['/style.css?v=9.8.0','/v6.css?v=9.8.0','/share.js?v=9.8.0','/app.js?v=9.8.0','/storage.js?v=9.8.0','/config.js?v=9.8.0','/auth.css?v=9.8.0','/auth.js?v=9.8.0','/confirm-email.js?v=9.8.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
+const CACHE='temanchat-v99-auto-update-push';
+const ASSETS=['/style.css?v=9.9.0','/v6.css?v=9.9.0','/share.js?v=9.9.0','/app.js?v=9.9.0','/storage.js?v=9.9.0','/config.js?v=9.9.0','/auth.css?v=9.9.0','/auth.js?v=9.9.0','/confirm-email.js?v=9.9.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
@@ -118,5 +118,25 @@ self.addEventListener('notificationclick',event=>{
   const existing=windows.find(c=>new URL(c.url).origin===self.location.origin);
   if(existing){await existing.navigate(url);return existing.focus()}
   return clients.openWindow(url);
+ })());
+});
+
+// Best effort: beberapa browser memicu event ini saat subscription push dirotasi.
+// Pada browser lain, app.js juga menyegarkan subscription saat dibuka kembali.
+function tcDecodeVapidKey(text){
+ const pad='='.repeat((4-text.length%4)%4);
+ const bytes=atob((text+pad).replace(/-/g,'+').replace(/_/g,'/'));
+ return Uint8Array.from(bytes,c=>c.charCodeAt(0));
+}
+self.addEventListener('pushsubscriptionchange',event=>{
+ event.waitUntil((async()=>{
+  try{
+   const cfg=await fetch('/api/push/config',{credentials:'include',cache:'no-store'}).then(r=>r.json());
+   if(!cfg?.configured||!cfg.publicKey)return;
+   const sub=event.newSubscription||await self.registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:tcDecodeVapidKey(cfg.publicKey)});
+   if(!sub)return;
+   const res=await fetch('/api/push/subscribe',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({subscription:sub.toJSON()})});
+   if(!res.ok)console.warn('Memperbarui langganan push gagal',res.status);
+  }catch(e){console.warn('Push perlu sinkronisasi saat aplikasi dibuka',e?.message||e)}
  })());
 });
