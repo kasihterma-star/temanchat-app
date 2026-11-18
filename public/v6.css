@@ -1030,3 +1030,46 @@ html[data-theme="dark"] #modal.tc-page-view .modal-head{background:rgba(34,37,39
   #messageForm{gap:5px!important;}
 }
 @media(prefers-reduced-motion:reduce){#messages,#contacts{scroll-behavior:auto!important;}}
+
+
+/* V9.9.6 — responsive hardening, primarily settings and on-screen keyboards. */
+#modal.tc-page-view[open]{overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line-soft) transparent;}
+#modal.tc-page-view #modalContent,
+#modal.tc-page-view .tc-tab-page,
+#modal.tc-page-view .tc-settings,
+#modal.tc-page-view .tc-account-page{min-width:0!important;max-width:100%!important;overflow-wrap:anywhere;}
+#modal.tc-page-view .tc-settings input,
+#modal.tc-page-view .tc-settings select,
+#modal.tc-page-view .tc-settings textarea,
+#modal.tc-page-view .tc-account-page input{min-width:0;max-width:100%;box-sizing:border-box;}
+#modal.tc-page-view .tc-avatar-settings{flex-wrap:wrap;min-width:0;}
+#modal.tc-page-view .tc-avatar-settings-buttons{min-width:0;max-width:100%;}
+#modal.tc-page-view .tc-avatar-settings-buttons button{white-space:normal;}
+#modal.tc-page-view .tc-email-display strong{overflow-wrap:anywhere;}
+#modal.tc-page-view button{max-width:100%;}
+.tc-bottom-nav{touch-action:manipulation;}
+#contacts,#messages{scrollbar-gutter:stable;}
+@media(min-width:741px) and (max-width:1100px){
+  #app{grid-template-columns:clamp(270px,31vw,325px) minmax(0,1fr)!important;}
+  .sidebar-title{gap:4px!important;}
+  #modal.tc-page-view[open]{width:min(700px,calc(100vw - 325px))!important;max-width:calc(100vw - 20px)!important;}
+}
+@media(max-width:740px){
+  #modal.tc-page-view[open]{
+    top:0!important;bottom:var(--tc-nav-space)!important;
+    height:calc(100dvh - var(--tc-nav-space))!important;
+    max-height:calc(100dvh - var(--tc-nav-space))!important;
+    overflow-y:auto!important;overscroll-behavior:contain;
+    padding:calc(14px + env(safe-area-inset-top,0px)) 15px 20px!important;
+  }
+  #modal.tc-page-view .modal-head{position:sticky!important;top:calc(-14px - env(safe-area-inset-top,0px))!important;z-index:3;}
+  #modal.tc-page-view #modalContent{padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))!important;}
+  #modal.tc-page-view .tc-settings{padding-bottom:18px;}
+  #modal.tc-page-view input,#modal.tc-page-view select,#modal.tc-page-view textarea{font-size:16px!important;}
+  #messages,#contacts{scrollbar-gutter:auto;}
+}
+@media(max-width:380px){
+  #modal.tc-page-view[open]{padding-left:12px!important;padding-right:12px!important;}
+  .tc-bottom-nav button small{font-size:9px!important;letter-spacing:-.02em;}
+  .tc-bottom-nav{gap:2px!important;}
+}

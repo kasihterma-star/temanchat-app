@@ -5,5 +5,5 @@ assert.match(css,/#messages\{[\s\S]*?overflow-y:auto!important/);
 assert.match(css,/--tc-nav-space:calc\(64px/);
 assert.match(css,/height:calc\(100dvh - var\(--tc-nav-space\)\)!important/);
 assert.match(css,/#modal\.tc-page-view\[open\]/);
-assert.match(html,/id="tcNavAccount"/);assert.match(js,/Pesan aktif · V9\.9\.5/);
-console.log('PASS V9.9.5 viewport, navbar and scrolling contracts');
+assert.match(html,/id="tcNavAccount"/);assert.match(js,/Pesan aktif · V9\.9\.6/);
+console.log('PASS V9.9.6 viewport, navbar and scrolling contracts');

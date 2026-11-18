@@ -17,5 +17,5 @@ assert.match(ui,/\['7d','7 hari'\]/);
 assert.match(ui,/\['30d','30 hari'\]/);
 assert.match(ui,/\['forever','Tanpa batas waktu'\]/);
 assert.match(ui,/adminCalls/);
-assert.match(sw,/temanchat-v995-responsive-layout/);
+assert.match(sw,/temanchat-v996-responsive-settings/);
 console.log('PASS V8.9: server permissions, expiring grants, admin push and UI');

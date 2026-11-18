@@ -13,5 +13,5 @@ assert.match(app,/media\.srcObject=e\.streams\?\.\[0\]\|\|new MediaStream/);
 assert.match(app,/document\.addEventListener\('pointerdown',resume\)/);
 assert.match(app,/detachVoiceResume\(c\)/);
 assert.match(app,/clearVoiceDisconnectTimer\(c\)/);
-assert.match(sw,/temanchat-v995-responsive-layout/);
+assert.match(sw,/temanchat-v996-responsive-settings/);
 console.log('PASS V8.3: audio-only tuning, voice signaling, no overlapping requests, cleanup, autoplay retry');

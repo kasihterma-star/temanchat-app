@@ -11,5 +11,5 @@ assert.match(push,/created_at>datetime\('now','-30 seconds'\)/);
 assert.match(index,/waitUntil\(sendRingingCallPushes/);
 assert.match(extras,/if\(deps\.sendCallAlerts\)/);
 assert.match(sw,/d\.kind==='call'\?\[300,120,300,120,500,200,300\]/);
-assert.match(sw,/temanchat-v995-responsive-layout/);
+assert.match(sw,/temanchat-v996-responsive-settings/);
 console.log('PASS V9.5: pengingat panggilan maksimal empat, berhenti bila bukan ringing, push background, getar khusus.');
