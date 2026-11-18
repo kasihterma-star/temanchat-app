@@ -17,5 +17,5 @@ assert.match(idx,/created_at<datetime\('now','-30 seconds'\)/);
 assert.match(idx,/kind:'missed_call'/);
 assert.match(app,/action:'timeout'/);
 assert.match(app,/closeCallPushLocally/);
-assert.match(sw,/temanchat-v992-darktheme-fix/);
+assert.match(sw,/temanchat-v994-four-tabs/);
 console.log('PASS V8.0: missed-call state transitions, close push, missed push, timeout and UI cleanup');

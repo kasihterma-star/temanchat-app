@@ -1,0 +1,1 @@
+TemanChat V9.9.4 BETA — empat tab Chat, Panggilan, Pengaturan, Akun. Akun berisi nama, foto, email, sesi perangkat, dan keluar. Pengaturan fokus pada tema, notifikasi, media, dan koneksi panggilan. Animasi glass ringan dan mode Reduce Motion tetap dihormati. Tidak ada perubahan server/database/TURN.
