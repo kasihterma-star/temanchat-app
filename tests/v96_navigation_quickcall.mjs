@@ -17,5 +17,5 @@ assert.match(a,/fetchMessages\(true\)/);
 assert.match(a,/Tentang TemanChat V9\.9/);
 assert.match(a,/Tambahkan ke Layar Utama/);
 assert.match(a,/echoCancellation:true,noiseSuppression:true,autoGainControl:true\},video:true/);
-assert.match(sw,/temanchat-v996-responsive-settings/);
+assert.match(sw,/temanchat-v997-whatsapp-pilot/);
 console.log('PASS V9.7: quick call, preserved approval, bottom tabs, refresh, iPhone guide and audio processing');

@@ -1073,3 +1073,21 @@ html[data-theme="dark"] #modal.tc-page-view .modal-head{background:rgba(34,37,39
   .tc-bottom-nav button small{font-size:9px!important;letter-spacing:-.02em;}
   .tc-bottom-nav{gap:2px!important;}
 }
+
+/* V9.9.7 — panel WhatsApp tes mengikuti glass & tema perangkat */
+.tc-wa-page .tc-wa-note{background:var(--control);color:var(--text)!important;padding:12px;border:1px solid var(--line-soft);border-radius:13px;line-height:1.55;overflow-wrap:anywhere}
+.tc-wa-page .tc-wa-tools,.tc-wa-page .tc-wa-conversations,.tc-wa-page .tc-wa-users{display:grid;gap:9px;margin:12px 0}
+.tc-wa-page .tc-wa-btn{background:var(--control);color:var(--strong);border:1px solid var(--line-soft);border-radius:12px;padding:12px;min-height:44px;text-align:left;font-weight:700;overflow-wrap:anywhere}
+.tc-wa-page .tc-wa-btn:hover{background:var(--control-hover)}
+.tc-wa-page .tc-wa-user{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line-soft);border-radius:13px;padding:10px;color:var(--text)}
+.tc-wa-page .tc-wa-user span{overflow-wrap:anywhere;min-width:0}
+.tc-wa-page .tc-wa-user button{flex-shrink:0}
+.tc-wa-page .tc-wa-history{min-height:160px;max-height:48dvh;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:10px 0;overscroll-behavior:contain}
+.tc-wa-page .tc-wa-bubble{max-width:88%;padding:10px 13px;border-radius:14px;background:var(--incoming);color:var(--text);border:1px solid var(--line-soft);overflow-wrap:anywhere}
+.tc-wa-page .tc-wa-bubble.out{align-self:flex-end;background:var(--outgoing)}
+.tc-wa-page .tc-wa-bubble small{font-size:10px;color:var(--muted)!important}
+.tc-wa-page .tc-wa-bubble p{margin:6px 0 0;color:var(--text)!important}
+.tc-wa-page .tc-wa-compose{display:grid;gap:10px;padding-bottom:14px}
+.tc-wa-page .tc-wa-compose textarea{width:100%;max-width:100%;resize:vertical;min-height:70px;border:1px solid var(--line-soft);border-radius:12px;padding:12px;color:var(--text-input);background:var(--control)}
+.tc-wa-page .tc-wa-compose button{width:100%;text-align:center}
+@media(max-width:740px){.tc-wa-page .tc-wa-history{max-height:45dvh}.tc-wa-page .tc-wa-user{flex-wrap:wrap}}

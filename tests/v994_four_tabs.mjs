@@ -7,4 +7,4 @@ assert.match(js,/deviceTitle,deviceHint,refreshDevices,deviceList,logout/);
 assert.match(js,/node\.hidden=tcPage==='account'/);
 assert.match(js,/tcNavCalls.*onclick/);
 assert.match(css,/V9\.9\.4 — four-tab/);
-console.log('PASS V9.9.6 four tabs and split settings/account');
+console.log('PASS V9.9.7 four tabs and split settings/account');

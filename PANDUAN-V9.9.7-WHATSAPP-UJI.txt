@@ -1,0 +1,51 @@
+TEMANCHAT V9.9.7 BETA — PILOT WHATSAPP CLOUD API
+
+TUJUAN
+Satu nomor tes Meta terhubung ke panel TemanChat untuk admin dan pengguna yang diberi izin.
+Ini BUKAN QR WhatsApp Web, BUKAN sinkronisasi seluruh chat pribadi, dan TIDAK menghubungkan nomor WhatsApp pribadi secara otomatis.
+Nomor tes dipakai dahulu; akun WA pribadi dan Business yang sudah ada tidak disentuh.
+
+TAHAP 1 — SIAPKAN NOMOR TES META
+1. Buka https://developers.facebook.com/apps/ dan buat aplikasi untuk WhatsApp Business Platform.
+2. Ikuti WhatsApp -> API Setup / Quickstart (label menu bisa berubah).
+3. Catat Phone Number ID dari nomor tes, Temporary Access Token, dan App Secret dari App Settings > Basic.
+4. Tambahkan satu nomor WhatsApp HP penerima pada daftar penerima tes di Meta dan verifikasi sesuai petunjuk Meta.
+5. Token sementara memiliki masa berlaku terbatas; nanti perlu token produksi yang sesuai.
+
+TAHAP 2 — CLOUDFLARE WORKERS & PAGES -> temanchat-app -> Settings -> Variables and Secrets
+Buat SECRET (jangan taruh token di GitHub atau chat):
+WA_ACCESS_TOKEN = token dari Meta
+WA_PHONE_NUMBER_ID = Phone Number ID dari Meta
+WA_VERIFY_TOKEN = kalimat acak panjang yang kamu buat sendiri, contoh jangan dipakai: GANTI_INI_DENGAN_RAHASIA_ACAK
+WA_APP_SECRET = App Secret dari Meta (bukan WA_ACCESS_TOKEN)
+WA_TEST_RECIPIENTS = daftar nomor penguji internasional tanpa '+', dipisah koma. Contoh format: 628xxxxxxxxxx,628yyyyyyyyyy
+WA_GRAPH_VERSION = v26.0 (opsional; sesuaikan versi Graph API yang didukung aplikasi Meta)
+Pastikan TC_CALL_ADMIN_EMAIL masih mengarah pada email admin TemanChat.
+Simpan secret di Cloudflare, BUKAN di file wrangler.jsonc, repository, atau browser.
+
+TAHAP 3 — WEBHOOK
+Callback URL: https://chat.ege.my.id/api/wa/webhook
+Verify token: sama dengan WA_VERIFY_TOKEN
+Berlangganan field "messages" pada konfigurasi Webhooks untuk objek WhatsApp Business Account.
+Webhook POST diverifikasi dengan X-Hub-Signature-256 menggunakan WA_APP_SECRET.
+
+TAHAP 4 — UJI
+- Deploy paket ZIP dengan cara biasa di GitHub lalu tunggu Cloudflare Ready.
+- Login akun ADMIN TemanChat, buka Pengaturan > WhatsApp Terhubung (Percobaan).
+- Pilih Kelola izin untuk memberi izin pengguna TemanChat biasa.
+- Masukkan nomor penguji yang sudah diizinkan di Meta dan tercantum dalam WA_TEST_RECIPIENTS.
+- Klik Kirim template tes via Meta (hello_world).
+- Pada HP penguji, BALAS pesan WhatsApp tersebut.
+- Kembali ke panel WhatsApp TemanChat dan klik Muat ulang percakapan.
+- Klik nomor yang muncul untuk membalas dari panel, selama masih dalam jendela layanan WhatsApp 24 jam.
+- Izin dibatasi pada panel TemanChat dan bisa dicabut admin kapan saja.
+
+BATASAN KEAMANAN & PRODUK
+- Seluruh pesan yang diterima/terkirim lewat panel tersimpan di database D1 TemanChat; hanya admin dan user yang diizinkan melihatnya. Tidak ada enkripsi ujung-ke-ujung milik TemanChat pada salinan database ini.
+- Siapa pun yang diberi izin pada pilot dapat melihat seluruh nomor/percakapan dari nomor tes; jangan bagikan izin sembarangan.
+- Nomor penerima tes ditetapkan dua lapis: daftar Cloudflare WA_TEST_RECIPIENTS dan daftar nomor penguji di Meta.
+- Kirim pesan teks bebas hanya dalam 24 jam setelah penerima mengirim pesan. Setelah itu butuh template yang disetujui.
+- Saat ini teks masuk dan keluar bisa ditampilkan; media hanya ditandai jenisnya. Belum ada sinkronisasi historis WhatsApp Web, QR Code, atau berbagi perangkat tertaut.
+- WA resmi dapat mengenakan biaya/limit untuk pemakaian produksi; cek dashboard Meta terbaru sebelum produksi.
+- Jangan memakai WhatsApp utama dulu. Tes dengan nomor test Meta dan penerima penguji.
+- Jika mengubah izin user di TemanChat, sesi WA tidak ditautkan ke perangkat; akses server langsung ditolak jika izin dicabut.
