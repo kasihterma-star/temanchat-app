@@ -843,3 +843,63 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
  .sidebar-title .profile{margin-left:0;order:5}
  #modal.tc-page-view[open]{padding-bottom:calc(36px + env(safe-area-inset-bottom))!important}
 }
+
+
+/* V9.9.2 — dark-theme contrast hardening for settings, history, about, and admin pages. */
+#modal.tc-page-view{--tc-surface:var(--control);--tc-surface-2:var(--glass);--tc-surface-3:var(--head);}
+#modal.tc-page-view .tc-settings,
+#modal.tc-page-view .tc-call-history,
+#modal.tc-page-view .tc-admin-list,
+#modal.tc-page-view .tc-admin-user,
+#modal.tc-page-view .tc-admin-summary,
+#modal.tc-page-view .tc-email-display,
+#modal.tc-page-view .tc-email-change-box,
+#modal.tc-page-view .tc-avatar-settings,
+#modal.tc-page-view .tc-drive-connect,
+#modal.tc-page-view .tc-media-notice,
+#modal.tc-page-view .tc-hint,
+#modal.tc-page-view details,
+#modal.tc-page-view summary{color:var(--text)!important;}
+#modal.tc-page-view b,
+#modal.tc-page-view strong,
+#modal.tc-page-view label,
+#modal.tc-page-view h3{color:var(--strong)!important;}
+#modal.tc-page-view p,
+#modal.tc-page-view small,
+#modal.tc-page-view .tc-hint,
+#modal.tc-page-view .tc-about-paragraph,
+#modal.tc-page-view .tc-admin-status,
+#modal.tc-page-view .tc-email-status,
+#modal.tc-page-view .tc-call-history-item small{color:var(--muted)!important;}
+#modal.tc-page-view .tc-media-action,
+#modal.tc-page-view .tc-avatar-remove,
+#modal.tc-page-view .tc-email-change-toggle,
+#modal.tc-page-view .tc-admin-refresh,
+#modal.tc-page-view .tc-admin-actions button,
+#modal.tc-page-view .tc-call-tile,
+#modal.tc-page-view .tc-call-history-item,
+#modal.tc-page-view .tc-admin-user,
+#modal.tc-page-view .tc-admin-summary,
+#modal.tc-page-view .tc-email-display,
+#modal.tc-page-view .tc-email-change-box,
+#modal.tc-page-view .tc-drive-connect,
+#modal.tc-page-view .tc-storage-guide,
+#modal.tc-page-view details{background:var(--tc-surface)!important;color:var(--text)!important;border-color:var(--line-soft)!important;}
+#modal.tc-page-view details summary{color:var(--strong)!important;}
+#modal.tc-page-view input,
+#modal.tc-page-view select,
+#modal.tc-page-view textarea{background:var(--tc-surface)!important;color:var(--text-input)!important;border-color:var(--line-soft)!important;caret-color:var(--text-input)!important;}
+#modal.tc-page-view input::placeholder,
+#modal.tc-page-view textarea::placeholder{color:var(--input-placeholder)!important;}
+#modal.tc-page-view select option{background:var(--bg)!important;color:var(--text)!important;}
+#modal.tc-page-view .primary,
+#modal.tc-page-view .tc-admin-approve{background:var(--accent)!important;color:var(--accent-ink)!important;border-color:transparent!important;}
+#modal.tc-page-view .tc-admin-revoke{background:rgba(206,62,69,.12)!important;color:#d86d75!important;border-color:rgba(206,62,69,.24)!important;}
+#modal.tc-page-view .tc-about-entry{background:var(--tc-surface)!important;color:var(--text)!important;border:1px solid var(--line-soft)!important;}
+#modal.tc-page-view .tc-avatar-photo{background:transparent!important;}
+#modal.tc-page-view .tc-verified-badge{color:#41a3ff!important;}
+#modal.tc-page-view .tc-notice-buttons button:not(.primary){background:var(--tc-surface)!important;color:var(--text)!important;border:1px solid var(--line-soft)!important;}
+html[data-theme="dark"] #modal.tc-page-view,
+html[data-theme="dark"] #modal.tc-page-view[open]{background:rgba(34,37,39,.96)!important;color:var(--text)!important;}
+html[data-theme="dark"] #modal.tc-page-view .modal-head{background:rgba(34,37,39,.96)!important;}
+@media(prefers-color-scheme:dark){html[data-theme="system"] #modal.tc-page-view,html[data-theme="system"] #modal.tc-page-view[open]{background:rgba(34,37,39,.96)!important;color:var(--text)!important;}html[data-theme="system"] #modal.tc-page-view .modal-head{background:rgba(34,37,39,.96)!important;}}

@@ -10,6 +10,32 @@ let voiceRecorder=null,voiceStream=null,voiceChunks=[],voiceTimer=null,voiceStar
 let voiceLocked=false,voicePendingStart=false,voicePressing=false,voicePressY=0,voicePressX=0,voiceCancelRequested=false;
 const MAX_VOICE_MS=180000;
 const CALL_MODE_KEY='tc_call_mode_v93';
+// Tanggal SQLite dari server selalu UTC; tampilkan waktu lokal pengguna.
+function tcParseAccessDate(value){
+ if(!value)return null;
+ const raw=String(value).trim();
+ const date=new Date(/(?:Z|[+-]\d\d:?\d\d)$/i.test(raw)?raw:raw.replace(' ','T')+'Z');
+ return Number.isFinite(date.getTime())?date:null;
+}
+function tcAccessExpiryText(expiresAt){
+ const date=tcParseAccessDate(expiresAt);
+ if(!expiresAt)return 'Permanen · tidak memiliki tanggal kedaluwarsa';
+ if(!date)return 'Tanggal berakhir belum tersedia';
+ const remaining=date.getTime()-Date.now();
+ const day=Math.floor(remaining/86400000);
+ const hour=Math.floor((remaining%86400000)/3600000);
+ const minute=Math.max(1,Math.ceil(remaining/60000));
+ const rest=remaining<=0?'Sudah kedaluwarsa':day>=1?`Sisa ${day} hari ${hour} jam`:remaining>=3600000?`Sisa ${Math.ceil(remaining/3600000)} jam`:`Sisa ${minute} menit`;
+ return `${rest} · Berakhir ${new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short'}).format(date)}`;
+}
+function tcGrantedDuration(reviewedAt,expiresAt){
+ if(!expiresAt)return 'forever';
+ const start=tcParseAccessDate(reviewedAt),end=tcParseAccessDate(expiresAt);
+ if(!start||!end)return '7d';
+ const days=(end-start)/86400000;
+ return [['1d',1],['7d',7],['30d',30]].reduce((best,item)=>Math.abs(item[1]-days)<Math.abs(best[1]-days)?item:best,['7d',7])[0];
+}
+
 // Jika belum pernah memilih manual, otomatis dipakai begitu admin menyetujui.
 // Pilihan dari versi lama tidak dipaksa ke mode Lokal, agar persetujuan baru langsung berlaku.
 const conversationModeKey=()=>active?.id?CALL_MODE_KEY+'_chat_'+String(active.id):CALL_MODE_KEY;
@@ -923,15 +949,12 @@ async function openAdminPanel(){
     const title=element('div','tc-admin-user-title');
     title.append(element('b','',person.display_name||person.username),element('small','','@'+person.username));
     const state=element('small','tc-admin-status',states[person.state]||person.state);
-    if(person.state==='approved'&&person.expires_at){
-     const date=new Date(person.expires_at.replace(' ','T')+'Z');
-     const duration=Math.max(0,date.getTime()-Date.now());
-     state.textContent+=' · Sisa '+(duration>=86400000?Math.ceil(duration/86400000)+' hari':Math.ceil(duration/3600000)+' jam');
-    }
-    const duration=element('select');duration.setAttribute('aria-label','Masa berlaku izin '+person.username);
+    if(person.state==='approved')state.textContent+=' · '+tcAccessExpiryText(person.expires_at);
+    const durationLabel=element('small','tc-access-duration-label','Masa berlaku untuk persetujuan berikutnya:');
+    const duration=element('select');duration.setAttribute('aria-label','Masa berlaku izin baru '+person.username);
     for(const [v,label] of [['1d','1 hari'],['7d','7 hari'],['30d','30 hari'],['forever','Tanpa batas waktu']]){
      const opt=element('option','',label);opt.value=v;duration.append(opt);
-    }duration.value='7d';
+    }duration.value=person.state==='approved'?tcGrantedDuration(person.reviewed_at,person.expires_at):'7d';
     const actions=element('div','tc-admin-actions');
     const approve=element('button','tc-admin-approve',person.state==='approved'?'Perpanjang izin':'Beri izin');
     const revoke=element('button','tc-admin-revoke','Cabut / Tolak');
@@ -944,7 +967,7 @@ async function openAdminPanel(){
      try{await post('/api/calls/access/review',{userId:person.user_id,state:value,duration:duration.value});toast('Izin @'+person.username+' berhasil diperbarui.');await refresh()}
      catch(error){toast(error.message);approve.disabled=revoke.disabled=false}
     }
-    actions.append(duration,approve,revoke);item.append(title,state,actions);list.append(item);
+    actions.append(durationLabel,duration,approve,revoke);item.append(title,state,actions);list.append(item);
    }
   }catch(error){if(seq===last)list.replaceChildren(element('small','','Gagal mengambil daftar: '+error.message))}
   finally{reload.disabled=false}
@@ -961,7 +984,7 @@ $('settingsBtn').onclick=()=>{
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
  const aboutBtn=element('button','tc-media-action tc-about-entry','ⓘ Tentang TemanChat · Versi 9.8');
  aboutBtn.type='button';aboutBtn.onclick=()=>{
-  modal('Tentang TemanChat V9.9.1','PWA TemanChat untuk pesan, panggilan suara, dan video.');
+  modal('Tentang TemanChat V9.9.2','PWA TemanChat untuk pesan, panggilan suara, dan video.');
   const c=$('modalContent');
   c.append(element('p','tc-about-paragraph','Panggilan masuk memakai Web Push dan dapat mengirim maksimal empat pengingat selama belum dijawab. Notifikasi bisa dipengaruhi pengaturan izin, baterai, atau kebijakan perangkat.'));
   c.append(element('p','tc-about-paragraph','Mode Otomatis saat akses disetujui memakai relay TURN seperti Mode Jarak Jauh. Mode Lokal tetap bisa dipilih manual dari Pengaturan.'));
@@ -1226,7 +1249,7 @@ $('settingsBtn').onclick=()=>{
  // Pilihan Otomatis aktif setelah akses jarak jauh disetujui admin.
  const callTitle=element('label','','Mode panggilan default');
  const callMode=element('select');
- for(const [v,text] of [['auto','Otomatis (disarankan) — jalur langsung atau relay TURN'],['local','Lokal — koneksi langsung Wi-Fi / LAN'],['remote','Jarak Jauh — khusus relay TURN bila tersedia']]){
+ for(const [v,text] of [['auto','Otomatis (disarankan) — utamakan relay TURN saat tersedia'],['local','Lokal — koneksi langsung Wi-Fi / LAN'],['remote','Jarak Jauh — khusus relay TURN bila tersedia']]){
    const opt=element('option','',text);opt.value=v;callMode.append(opt);
  }
  callMode.value=preferredCallMode(remoteCallGranted);
@@ -1239,7 +1262,7 @@ $('settingsBtn').onclick=()=>{
      callMode.value=preferredCallMode(remoteCallGranted);
      callMode.querySelector('option[value="auto"]').disabled=!d.approved;
      callMode.querySelector('option[value="remote"]').disabled=!d.approved;
-     accessText.textContent=d.admin?'Anda adalah admin panggilan.':d.approved?('Panggilan jarak jauh disetujui'+(d.expiresAt?' hingga '+d.expiresAt+' UTC':' tanpa batas waktu')+'.'):d.state==='pending'?'Pengajuan menunggu persetujuan admin.':d.state==='rejected'?'Izin ditolak atau dicabut.':d.state==='expired'?'Izin sudah kedaluwarsa. Ajukan kembali.':'Mode jarak jauh belum diaktifkan.';
+     accessText.textContent=d.admin?'Anda adalah admin panggilan · izin permanen.':d.approved?('Panggilan jarak jauh disetujui · '+tcAccessExpiryText(d.expiresAt)):d.state==='pending'?'Pengajuan menunggu persetujuan admin.':d.state==='rejected'?'Izin ditolak atau dicabut.':d.state==='expired'?'Izin sudah kedaluwarsa. Ajukan kembali.':'Mode jarak jauh belum diaktifkan.';
      requestAccess.hidden=!!d.approved||d.state==='pending'||!d.adminConfigured;
      if(!d.adminConfigured)accessText.textContent='Admin panggilan belum dikonfigurasi.';
      if(d.admin)await loadCallRequests();
@@ -1253,14 +1276,14 @@ $('settingsBtn').onclick=()=>{
    for(const r of d.requests){
      const item=element('div','tc-call-access-item');
      const labelState={pending:'Menunggu persetujuan',approved:'Diizinkan',rejected:'Ditolak / Dicabut',expired:'Kedaluwarsa'}[r.state]||r.state;
-     item.append(element('small','',`${r.display_name} (@${r.username}) — ${labelState}${r.state==='approved'&&r.expires_at?' sampai '+r.expires_at+' UTC':''}`));
+     item.append(element('small','',`${r.display_name} (@${r.username}) — ${labelState}${r.state==='approved'?' · '+tcAccessExpiryText(r.expires_at):''}`));
      const durationSelect=element('select');
      for(const [value,label] of [['1d','1 hari'],['7d','7 hari'],['30d','30 hari'],['forever','Tanpa batas waktu']]){
        const opt=element('option','',label);opt.value=value;durationSelect.append(opt);
      }
-     durationSelect.value='7d';
-     durationSelect.setAttribute('aria-label','Masa berlaku izin');
-     item.append(durationSelect);
+     durationSelect.value=r.state==='approved'?tcGrantedDuration(r.reviewed_at,r.expires_at):'7d';
+     durationSelect.setAttribute('aria-label','Masa berlaku izin berikutnya');
+     item.append(element('small','tc-access-duration-label','Masa berlaku untuk persetujuan berikutnya:'),durationSelect);
      for(const [state,label] of [['approved','Setujui / Perpanjang'],['rejected',r.state==='approved'?'Cabut Akses':'Tolak / Cabut']]){
        const btn=element('button','tc-media-action',label);btn.type='button';
        btn.onclick=async()=>{
@@ -1646,7 +1669,7 @@ async function openCallSetup(kind){
    remoteTile.title=approved?'Jarak Jauh tersedia':'Menunggu izin admin';
    choose(preferredCallMode(approved));
    if(d.admin)stateText.textContent='Akun admin · Mode Jarak Jauh aktif.';
-   else if(approved)stateText.textContent='✓ Izin disetujui. Mode Otomatis tersedia'+(d.expiresAt?' sampai '+d.expiresAt+' UTC':'')+'.';
+   else if(approved)stateText.textContent='✓ Izin disetujui · '+tcAccessExpiryText(d.expiresAt);
    else if(!d.adminConfigured)stateText.textContent='Admin belum mengaktifkan pengaturan izin. Mode Lokal tersedia.';
    else if(d.state==='pending')stateText.textContent='⏳ Permintaan sedang menunggu keputusan admin.';
    else if(d.state==='rejected')stateText.textContent='Izin ditolak/dicabut. Kamu bisa mengajukan kembali.';
@@ -1678,8 +1701,9 @@ async function quickCall(kind){
   const chosen=preferredCallMode(remoteCallGranted);
   // Jalur yang telah berhasil diuji: AUTO menggunakan jalur REMOTE/TURN;
   // tetap menampilkan preferensi AUTO dalam menu, tanpa popup sebelum panggilan.
-  const reliable=chosen==='auto'?'remote':chosen;
-  await startCall(kind,reliable);
+  // Kirim strategi Otomatis secara utuh: server tetap menggunakan relay TURN
+  // yang sama seperti Jarak Jauh, sementara kedua sisi tahu pilihan aslinya.
+  await startCall(kind,chosen);
  }catch(e){toast('Gagal memeriksa izin: '+e.message)}
  finally{quickCallBusy=false}
 }
@@ -1762,7 +1786,7 @@ async function init(){
   if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.9.1'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.9.2'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

@@ -297,7 +297,7 @@ export async function handleExtra(request, env, me, deps){
   const result=await env.DB.prepare(`SELECT usr.id AS user_id,usr.username,usr.display_name,
     CASE WHEN access.state='approved' AND access.expires_at IS NOT NULL AND access.expires_at<=datetime('now') THEN 'expired'
          ELSE COALESCE(access.state,'none') END AS state,
-    access.expires_at,access.requested_at
+    access.expires_at,access.requested_at,access.reviewed_at
     FROM users usr LEFT JOIN tc_remote_call_access access ON access.user_id=usr.id
     WHERE usr.id<>? AND (?='' OR instr(lower(usr.username),lower(?))>0 OR instr(lower(usr.display_name),lower(?))>0)
     ORDER BY CASE WHEN access.state='pending' THEN 0 WHEN access.state='approved' THEN 1 ELSE 2 END,
