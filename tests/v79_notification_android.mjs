@@ -9,5 +9,5 @@ assert.match(sw,/\['both','vibrate'\]\.includes\(notificationMode\)/);
 assert.match(app,/\$\('backBtn'\)\.onclick=showList/);
 assert.doesNotMatch(app,/history\.pushState\(/);
 assert.doesNotMatch(app,/addEventListener\('popstate'/);
-assert.match(html,/v=9\.0\.0/);
+assert.match(html,/v=9\.1\.0/);
 console.log('PASS V7.9: notification options valid, back button independent, cache updated');
