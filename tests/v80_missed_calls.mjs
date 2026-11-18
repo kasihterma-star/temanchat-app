@@ -17,9 +17,5 @@ assert.match(idx,/created_at<datetime\('now','-30 seconds'\)/);
 assert.match(idx,/kind:'missed_call'/);
 assert.match(app,/action:'timeout'/);
 assert.match(app,/closeCallPushLocally/);
-<<<<<<< HEAD
-assert.match(sw,/temanchat-v91-call-mode-display/);
-=======
 assert.match(sw,/temanchat-v90-admin-panel/);
->>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
 console.log('PASS V8.0: missed-call state transitions, close push, missed push, timeout and UI cleanup');

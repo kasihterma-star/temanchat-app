@@ -1344,7 +1344,6 @@ function markCallConnected(c){
  if(!c||currentCall!==c)return;
  if(!c.connectedAt){
   c.connectedAt=Date.now();stopCallTone();
-  void showCallPath(c);
   c.durationInterval=setInterval(()=>updateCallDuration(c),1000);
  }
  updateCallDuration(c);
@@ -1355,32 +1354,9 @@ function callLabel(text){
  $('callStatusPill').textContent=text;
  if(/Terhubung|Menghubungkan/.test(text))stopCallTone();
 }
-function setCallModeDisplay(mode,detail){
- const badge=$('callModeBadge'),hint=$('callModeHint');
- if(!badge||!hint)return;
- badge.dataset.mode=mode==='remote'?'remote':mode==='local'?'local':'pending';
- badge.textContent=mode==='remote'?'Mode Jarak Jauh':mode==='local'?'Mode Lokal':'Memeriksa mode panggilan…';
- hint.textContent=detail||(mode==='remote'?'Mencoba koneksi internet antarperangkat':mode==='local'?'Hanya perangkat di LAN / Wi-Fi yang saling terhubung':'Mengambil konfigurasi dari server…');
-}
-async function showCallPath(c){
- if(currentCall!==c||!c.pc||!c.connectedAt)return;
- try{
-  const stats=await c.pc.getStats();if(currentCall!==c)return;
-  let pair=null;
-  stats.forEach(s=>{if(s.type==='transport'&&s.selectedCandidatePairId)pair=stats.get(s.selectedCandidatePairId)});
-  if(!pair)stats.forEach(s=>{if(s.type==='candidate-pair'&&s.nominated&&s.state==='succeeded')pair=s});
-  const local=pair&&stats.get(pair.localCandidateId);
-  const remote=pair&&stats.get(pair.remoteCandidateId);
-  if(c.mode==='remote'){
-   const relay=local?.candidateType==='relay'||remote?.candidateType==='relay';
-   setCallModeDisplay('remote',relay?'Tersambung melalui relay TURN':'Tersambung langsung (tanpa relay TURN)');
-  }else if(c.mode==='local')setCallModeDisplay('local','Tersambung melalui jaringan lokal');
- }catch{/* Diagnostik bukan syarat agar panggilan berfungsi. */}
-}
 function showCallUI(kind,name,incoming,username){
  const dlg=$('callDialog');$('callName').textContent=name||'TemanChat';paintAvatar($('callAvatar'),name,username);
  $('callRemote').style.display='flex';$('callAvatar').style.display='grid';$('remoteVideo').style.display='none';$('localVideo').style.display='none';
- setCallModeDisplay(incoming?'pending':(currentCall?.mode||'pending'));
  $('acceptCall').hidden=!incoming;$('cameraCall').hidden=kind!=='video';callLabel(incoming?'Panggilan masuk…':'Memanggil…');
  if(!dlg.open)dlg.showModal();
  if(!currentCall?.isCaller)vibrateForCall();
@@ -1416,12 +1392,7 @@ $('muteCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const tr
 $('cameraCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getVideoTracks())track.enabled=!track.enabled;$('cameraCall').querySelector('span').textContent=c.stream.getVideoTracks()[0]?.enabled?'Kamera aktif':'Kamera mati';};
 async function preparePeer(c){
  const opts=await api('/api/calls/config?callId='+encodeURIComponent(c.id));
-<<<<<<< HEAD
- c.mode=opts.mode==='remote'?'remote':'local';
- if(currentCall===c)setCallModeDisplay(c.mode,c.mode==='remote'?(opts.turnConfigured?'TURN tersedia; memeriksa jalur koneksi…':'TURN belum tersedia; mencoba STUN langsung'):'Hanya LAN / Wi-Fi yang saling terhubung');
-=======
  const hint=$('callModeHint');if(hint)hint.textContent=opts.mode==='remote'?'Mode jarak jauh: koneksi langsung atau TURN bila tersedia':'Mode lokal: hanya LAN / Wi-Fi yang saling terhubung';
->>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
  if(opts.mode==='remote'&&!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'Mode jarak jauh sedang mencoba STUN langsung. Jika gagal, perlu TURN.');
  const constraints=c.kind==='audio'
   ? {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}
@@ -1509,11 +1480,7 @@ async function startCall(kind){
  try{
   const mode=remoteCallGranted&&localStorage.getItem(CALL_MODE_KEY)==='remote'?'remote':'local';
   const d=await post('/api/calls/start',{conversationId:active.id,kind,mode});
-<<<<<<< HEAD
-  const c={id:d.callId,kind,mode,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
-=======
   const c={id:d.callId,kind,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
->>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
   // Batasi panggilan tidak terjawab ~30 detik tanpa menunggu cron 1 menit.
   c.timeoutTimer=setTimeout(async()=>{
    if(currentCall!==c||c.connectedAt)return;

@@ -1,11 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-<<<<<<< HEAD
-const CACHE='temanchat-v91-call-mode-display';
-const ASSETS=['/style.css?v=9.1.0','/v6.css?v=9.1.0','/share.js?v=9.1.0','/app.js?v=9.1.0','/storage.js?v=9.1.0','/config.js?v=9.1.0','/auth.css?v=9.1.0','/auth.js?v=9.1.0','/confirm-email.js?v=9.1.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
-=======
 const CACHE='temanchat-v90-admin-panel';
 const ASSETS=['/style.css?v=9.0.0','/v6.css?v=9.0.0','/share.js?v=9.0.0','/app.js?v=9.0.0','/storage.js?v=9.0.0','/config.js?v=9.0.0','/auth.css?v=9.0.0','/auth.js?v=9.0.0','/confirm-email.js?v=9.0.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
->>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
