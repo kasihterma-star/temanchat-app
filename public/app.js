@@ -845,7 +845,7 @@ mic.onclick=e=>{if(e.detail===0||e.pointerType==='mouse'){
  if(voiceRecorder||voicePendingStart)void voiceFinish(true);else{voicePressing=false;void beginVoiceRecording().then(()=>{if(voiceRecorder){voiceLocked=true;voiceRefreshUI()}});}
 }};
 $('attachBtn').onclick=()=>{if(!mediaEnabled)toast('Untuk mengirim foto, hubungkan Cloudflare R2 lebih dahulu.');else $('attachmentInput').click()};
-function modal(title,text,buttons=[]){const page=/^(Pengaturan TemanChat|Riwayat panggilan|Tentang TemanChat|Koneksi panggilan|Panel Admin TemanChat)/.test(title);const dlg=$('modal');if(dlg.open)dlg.close();dlg.classList.toggle('tc-page-view',page);$('modalTitle').textContent=title;$('modalDesc').textContent=text;const c=$('modalContent');c.replaceChildren();for(const b of buttons){const btn=element('button','primary',b.label);btn.onclick=b.action;c.append(btn)}if(page)dlg.show();else dlg.showModal();}
+function modal(title,text,buttons=[]){const page=/^(Pengaturan TemanChat|Riwayat panggilan|Tentang TemanChat|Koneksi panggilan|Panel Admin TemanChat)/.test(title);const dlg=$('modal');if(dlg.open)dlg.close();dlg.classList.toggle('tc-page-view',page);$('modalTitle').textContent=title;$('modalDesc').textContent=text;const c=$('modalContent');c.replaceChildren();for(const b of buttons){const btn=element('button','primary',b.label);btn.onclick=b.action;c.append(btn)}dlg.showModal();}
 $('closeModal').onclick=()=>$('modal').close();
 $('moreBtn').onclick=()=>{if(!active)return toast('Pilih percakapan terlebih dahulu.');void openCallSetup(null);};
 // Riwayat tersimpan di D1, bukan hanya saat browser terbuka.
@@ -942,9 +942,9 @@ $('settingsBtn').onclick=()=>{
  modal('Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
  if(me?.is_admin)$('modalDesc').append(' ',officialBadge());
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
- const aboutBtn=element('button','tc-media-action tc-about-entry','ⓘ Tentang TemanChat · Versi 9.7');
+ const aboutBtn=element('button','tc-media-action tc-about-entry','ⓘ Tentang TemanChat · Versi 9.8');
  aboutBtn.type='button';aboutBtn.onclick=()=>{
-  modal('Tentang TemanChat V9.7','PWA TemanChat untuk pesan, panggilan suara, dan video.');
+  modal('Tentang TemanChat V9.8','PWA TemanChat untuk pesan, panggilan suara, dan video.');
   const c=$('modalContent');
   c.append(element('p','tc-about-paragraph','Panggilan masuk memakai Web Push dan dapat mengirim maksimal empat pengingat selama belum dijawab. Notifikasi bisa dipengaruhi pengaturan izin, baterai, atau kebijakan perangkat.'));
   c.append(element('p','tc-about-paragraph','Mode Otomatis saat akses disetujui memakai relay TURN seperti Mode Jarak Jauh. Mode Lokal tetap bisa dipilih manual dari Pengaturan.'));
@@ -1648,7 +1648,7 @@ async function openCallSetup(kind){
  await loadAccess();
 }
 $('callModeMenuBtn').onclick=()=>void openCallSetup(null);
-// V9.7: panggilan langsung; menu titik tiga setiap chat menyimpan mode untuk chat tersebut.
+// V9.8: panggilan langsung; menu titik tiga setiap chat menyimpan mode untuk chat tersebut.
 let quickCallBusy=false;
 async function quickCall(kind){
  if(quickCallBusy||currentCall)return toast('Ada panggilan yang sedang diproses.');
@@ -1725,6 +1725,10 @@ function tcMarkNav(id){for(const key of ['tcNavChats','tcNavCalls','tcNavSetting
 $('tcNavChats').onclick=()=>{if($('modal').open)$('modal').close();showList();tcMarkNav('tcNavChats')};
 $('tcNavCalls').onclick=()=>{tcMarkNav('tcNavCalls');void showCallHistory()};
 $('tcNavSettings').onclick=()=>{tcMarkNav('tcNavSettings');$('settingsBtn').click()};
+// Satu akses profil di sisi kanan daftar chat, menu Pengaturan tetap di navigasi bawah.
+const tcAccountProfile=document.querySelector('.sidebar-title .profile');
+if(tcAccountProfile){tcAccountProfile.setAttribute('role','button');tcAccountProfile.setAttribute('tabindex','0');tcAccountProfile.setAttribute('aria-label','Buka profil dan pengaturan akun');tcAccountProfile.onclick=()=>{$('tcNavSettings').click()};tcAccountProfile.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('tcNavSettings').click()}};}
+
 $('modal').addEventListener('close',()=>{ $('modal').classList.remove('tc-page-view');tcMarkNav('tcNavChats'); });
 $('tcRefreshBtn').onclick=async()=>{
  const btn=$('tcRefreshBtn');btn.disabled=true;btn.classList.add('tc-refresh-working');
@@ -1741,7 +1745,7 @@ async function init(){
   if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.7'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.8'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

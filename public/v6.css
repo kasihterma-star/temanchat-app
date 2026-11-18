@@ -830,3 +830,16 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 
 /* Menu jaringan sekarang berada di tiap percakapan, bukan menu global sidebar. */
 #callModeMenuBtn{display:none!important}
+
+/* V9.8 — single profile entry, stable settings navigation and modal stacking. */
+.sidebar-title{gap:8px;flex-wrap:wrap}
+.sidebar-title .profile{order:10;margin-left:auto;padding:0!important;border:0!important;flex:none!important;display:flex;align-items:center;justify-content:center;min-width:40px;min-height:40px;border-radius:14px;cursor:pointer;background:var(--control);outline-offset:3px;transition:background .16s ease,transform .16s ease}
+.sidebar-title .profile:hover,.sidebar-title .profile:focus-visible{background:var(--accent-soft);transform:translateY(-1px)}
+.sidebar-title .profile>.avatar{width:35px;height:35px;border-radius:12px}
+.sidebar-title .profile>div:nth-child(2){display:none!important}
+.sidebar-title .profile #settingsBtn{display:none!important}
+#modal.tc-page-view::backdrop{background:color-mix(in srgb,#101f1e 15%,transparent)!important}
+@media(max-width:740px){
+ .sidebar-title .profile{margin-left:0;order:5}
+ #modal.tc-page-view[open]{padding-bottom:calc(36px + env(safe-area-inset-bottom))!important}
+}

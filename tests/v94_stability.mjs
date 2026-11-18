@@ -8,5 +8,5 @@ assert(js.includes("opts.strategy==='auto'"),'receiver shares call strategy from
 assert(css.includes('.call-dialog .call-remote{') && css.includes('position:absolute!important'),'avatar center uses stable overlay');
 assert(css.includes('.call-dialog .call-controls{'),'controls use stable overlay');
 assert(css.includes('button[hidden]{display:none!important;}'),'hidden call buttons do not consume space');
-assert(sw.includes('temanchat-v97-adaptive-pages-chat-network'));
+assert(sw.includes('temanchat-v98-settings-profile-navigation'));
 console.log('PASS V9.4: automatic TURN, shared call strategy, fixed mobile/desktop overlay, cache');

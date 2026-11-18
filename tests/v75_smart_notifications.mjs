@@ -13,7 +13,7 @@ assert.match(app,/pagehide',leaveNotificationFocus/);
 assert.match(app,/touchstart/);assert.match(app,/touchmove/);assert.match(app,/touchend/);
 assert.match(app,/distance>=62/);assert.match(css,/\.tc-swipe-reply-icon/);
 assert.match(css,/\.tc-voice-wave/);assert.match(html,/class="tc-voice-wave"/);
-assert.match(app,/tc-audio-shell/);assert.match(sw,/temanchat-v97-adaptive-pages-chat-network/);
+assert.match(app,/tc-audio-shell/);assert.match(sw,/temanchat-v98-settings-profile-navigation/);
 // D1 mock: verifies authorized focus, authorization failure and skip for active chat.
 const user='u1',chat='11111111-1111-4111-8111-111111111111',endpoint='https://fcm.googleapis.com/fcm/send/test';
 const trace=[],mock={
