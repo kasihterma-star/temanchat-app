@@ -9,6 +9,6 @@ assert.match(js,/location\.reload\(\)/);
 assert.doesNotMatch(js,/setInterval\([^)]*location\.reload/);
 assert.match(html,/id="retrySecurityBtn"/);
 assert.match(html,/id="reloadPageBtn"/);
-assert.match(html,/auth\.js\?v=9\.1\.0/);
-assert.match(sw,/temanchat-v91-call-mode-display/);
+assert.match(html,/auth\.js\?v=9\.1\.1/);
+assert.match(sw,/temanchat-v91-1-call-mode-display/);
 console.log('PASS V8.6: Turnstile readiness, bounded retry, recovery actions and cache version');

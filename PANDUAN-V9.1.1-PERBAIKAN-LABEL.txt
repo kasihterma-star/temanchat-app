@@ -1,0 +1,19 @@
+TemanChat V9.1 (build 9.1.1) — Pembetulan Label dan Cache PWA
+
+Sumber: TemanChat_V9.1_Mode_Panggilan(1).zip yang diunggah pengguna.
+
+Perbaikan:
+- Label status pada panel kiri yang sebelumnya tetap menampilkan V9.0, kini V9.1.
+- Query version aset JavaScript/CSS dari 9.1.0 ke 9.1.1 agar browser mengambil kode baru.
+- Cache service worker berganti ke temanchat-v91-1-call-mode-display untuk membersihkan cache lama pada aktivasi.
+- Fitur mode panggilan V9.1 dipertahankan, tidak diubah.
+- Tidak mengubah logic login, Turnstile, D1, atau secret Cloudflare.
+
+Pemasangan:
+1. Ekstrak ZIP dan unggah ISI folder temanchat-app-main ke root repo GitHub yang terhubung ke Worker.
+2. Commit/push semua perubahan dan pastikan Cloudflare menunjukkan deployment baru berstatus Ready.
+3. Buka https://chat.ege.my.id (bukan alamat workers.dev), lalu Ctrl+Shift+R.
+4. Kalau masih lama, tutup seluruh tab/PWA TemanChat, buka kembali; Service Worker perlu kesempatan aktivasi.
+5. Pastikan panel kiri menampilkan Pesan aktif · V9.1. Uji panggilan pada dua perangkat.
+
+Catatan: Ready di Cloudflare tidak selalu berarti kode sudah terkirim ke domain jika repository/deployment berbeda. Perubahan ini belum diuji langsung pada domain publik.
