@@ -7,5 +7,5 @@ assert.ok(ui.includes("'/api/calls/config?callId='"));
 assert.ok(ui.includes("localStorage.getItem(CALL_MODE_KEY)"));
 assert.ok(ui.includes('Pengajuan panggilan jarak jauh'));
 assert.ok(ui.includes("'/api/calls/access'"));
-assert.ok(ui.includes("const mode=selectedMode==='remote'?'remote':'local'"));
+assert.ok(ui.includes("const mode=['auto','remote','local'].includes(selectedMode)?selectedMode:'local'"));
 console.log('PASS V8.7 call modes and server gate');

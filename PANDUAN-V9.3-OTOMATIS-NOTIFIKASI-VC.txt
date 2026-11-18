@@ -1,0 +1,63 @@
+TemanChat V9.3 BETA — PANGGILAN OTOMATIS, UI, & PUSH
+========================================================
+
+DASAR PROYEK
+- Berbasis V9.2 yang telah berhasil untuk suara/video beda jaringan.
+- Tidak menghapus akun, percakapan, database D1, atau secret TURN.
+- URL resmi: https://chat.ege.my.id
+
+MODE PANGGILAN
+1. Otomatis (pilihan awal setelah izin admin disetujui):
+   ICE dapat memilih koneksi langsung (host/STUN) atau relay TURN, pada
+   jaringan yang sama maupun berbeda. Kedua sisi panggilan memakai
+   strategi yang sama melalui server.
+2. Lokal (manual): koneksi langsung, tanpa TURN.
+3. Jarak Jauh (manual): relay TURN saat kredensial tersedia.
+
+Izin admin tetap wajib untuk mode Otomatis dan Jarak Jauh. Mode Lokal
+tersedia sebelum izin diberikan. Status persetujuan dicek ketika popup
+panggilan dibuka. Perubahan mode manual disimpan di perangkat. Jika
+admin mencabut/izin berakhir, Otomatis/Jarak Jauh tidak dapat memulai
+panggilan baru. D1 membuat satu tabel kecil tc_call_auto_strategies
+secara otomatis; tidak perlu menghapus atau mengimpor ulang DB.
+
+PERBAIKAN V9.3
+- Foto profil, status panggilan, video, dan tombol disusun dalam area
+  terpisah, memperhatikan safe-area ponsel.
+- Popup mode memakai kartu modern dengan opsi Otomatis/Lokal/Jarak Jauh.
+- Server mengirim push ke masing-masing langganan perangkat yang berhak.
+  Perangkat yang benar-benar sedang melihat chat tidak mendapat popup
+  ganda, tetapi perangkat lain tetap mendapat push.
+- Service Worker menampilkan notifikasi panggilan tanpa menunggu fetch
+  status panggilan yang bisa terhambat ketika HP terkunci. Notifikasi
+  usang diperiksa saat diketuk; call_end menutup notifikasi aktif.
+- Push yang sudah diizinkan dicoba disinkronkan kembali saat aplikasi
+  dibuka, tanpa meminta izin berkali-kali.
+
+CARA MEMASANG
+1. Ekstrak ZIP, salin isi folder temanchat-app-main ke repo GitHub yang
+   sudah dipakai TemanChat. Jangan buat repo baru.
+2. Commit & Push, tunggu deployment Cloudflare Workers/Pages Ready.
+3. Di HP, tutup TemanChat dan buka lagi, atau refresh dengan kuat.
+4. Periksa label "Pesan aktif · V9.3" pada sidebar.
+5. Admin memberi izin Jarak Jauh ke akun biasa. Akun buka menu Mode
+   panggilan lalu pilih Otomatis; jika belum pernah memilih, opsi itu
+   otomatis terpilih setelah izin disetujui.
+6. Tes: video call satu Wi-Fi, Wi-Fi vs data seluler, dan notifikasi
+   dengan PWA ditutup/HP terkunci; coba juga tombol Akhiri/Angkat.
+
+PENGATURAN YANG TIDAK BOLEH DIHAPUS
+- CF_TURN_KEY_ID dan CF_TURN_API_TOKEN pada Worker (Server Secrets).
+- VAPID_PUBLIC_KEY dan VAPID_PRIVATE_KEY untuk Web Push.
+- TC_CALL_ADMIN_EMAIL untuk persetujuan akses panggilan.
+- Domain chat.ege.my.id dan widget Cloudflare Turnstile resmi.
+
+BATASAN PENTING
+- Tidak ada situs/PWA yang dapat menjamin 100% push tiba instan saat HP
+  menghemat baterai, izin notifikasi mati, atau push service bermasalah.
+- iPhone memerlukan PWA yang ditambahkan ke Layar Utama untuk Web Push.
+- Notifikasi panggilan saat aplikasi ditutup bukan layar panggilan VoIP
+  native; mengetuk notifikasi membuka aplikasi untuk menjawab.
+- Mode Otomatis membutuhkan TURN yang valid untuk kondisi jaringan yang
+  membatasi WebRTC langsung. Jika TURN gagal, tidak ada jaminan tersambung.
+- Kinerja audio/video nyata wajib dicek di dua perangkat setelah deploy.

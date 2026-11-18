@@ -12,6 +12,7 @@ const envBase={
   async first(){
    if(sql.includes('FROM tc_call_sessions WHERE id='))return {id,caller_id:me.id,callee_id:'33333333-3333-4333-8333-333333333333',status:'ringing'};
    if(sql.includes('SELECT mode FROM tc_call_modes'))return {mode:'remote'};
+   if(sql.includes('SELECT call_id FROM tc_call_auto_strategies'))return null;
    throw new Error('Unexpected SQL first: '+sql.slice(0,60));
   }
  }}},

@@ -72,6 +72,10 @@ export function ensureExtras(env) {
       `CREATE TABLE IF NOT EXISTS tc_call_modes (
         call_id TEXT PRIMARY KEY, mode TEXT NOT NULL CHECK(mode IN ('local','remote')),
         FOREIGN KEY(call_id) REFERENCES tc_call_sessions(id) ON DELETE CASCADE
+      )`,
+      `CREATE TABLE IF NOT EXISTS tc_call_auto_strategies (
+        call_id TEXT PRIMARY KEY,
+        FOREIGN KEY(call_id) REFERENCES tc_call_sessions(id) ON DELETE CASCADE
       )`
     ];
     for (const sql of ddl) await env.DB.prepare(sql).run();
@@ -351,14 +355,16 @@ export async function handleExtra(request, env, me, deps){
   if(!call)return bad('Panggilan tidak ditemukan untuk sesi ini.',404);
   const modeRow=await env.DB.prepare('SELECT mode FROM tc_call_modes WHERE call_id=?').bind(call.id).first();
   const callMode=modeRow?.mode||'local';
-  if(callMode==='local')return res({ok:true,mode:'local',iceServers:[],turnConfigured:false,turnWarning:''});
+  const autoRow=callMode==='remote'?await env.DB.prepare('SELECT call_id FROM tc_call_auto_strategies WHERE call_id=?').bind(call.id).first():null;
+  const strategy=autoRow?'auto':callMode;
+  if(callMode==='local')return res({ok:true,mode:'local',strategy:'local',iceServers:[],turnConfigured:false,turnWarning:''});
   if(call.status!=='ringing'&&call.status!=='answered')return bad('Panggilan sudah selesai.',409);
 
   const fallback=[{urls:['stun:stun.cloudflare.com:3478','stun:stun.l.google.com:19302']}];
   // Cloudflare Realtime TURN: secret jangka panjang hanya ada di Worker.
   // Browser menerima kredensial sementara untuk satu sesi panggilan.
   if(!env.CF_TURN_KEY_ID||!env.CF_TURN_API_TOKEN)
-    return res({ok:true,mode:'remote',iceServers:fallback,turnConfigured:false,turnStatus:'not_configured',turnWarning:'Cloudflare TURN belum aktif. Panggilan akan mencoba koneksi langsung menggunakan STUN.'});
+    return res({ok:true,mode:'remote',strategy,iceServers:fallback,turnConfigured:false,turnStatus:'not_configured',turnWarning:'Cloudflare TURN belum aktif. Panggilan akan mencoba koneksi langsung menggunakan STUN.'});
   try{
     if(!/^[a-zA-Z0-9_-]{8,128}$/.test(env.CF_TURN_KEY_ID))throw Error('TURN key ID tidak valid');
     const response=await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(env.CF_TURN_KEY_ID)}/credentials/generate-ice-servers`,{
@@ -382,17 +388,19 @@ export async function handleExtra(request, env, me, deps){
       return {urls};
     }).filter(Boolean):[];
     if(!iceServers.some(x=>x.username&&x.credential&&x.urls.some(u=>u.startsWith('turn'))))throw Error('Provider tidak mengembalikan kredensial TURN');
-    return res({ok:true,mode:'remote',iceServers,turnConfigured:true,turnStatus:'ready'});
+    return res({ok:true,mode:'remote',strategy,iceServers,turnConfigured:true,turnStatus:'ready'});
   }catch(error){
     console.warn('TURN setup',error?.message||'unknown');
-    return res({ok:true,mode:'remote',iceServers:fallback,turnConfigured:false,turnStatus:'unavailable',turnWarning:'Relay TURN belum dapat dihubungi. Periksa CF_TURN_KEY_ID dan CF_TURN_API_TOKEN di Cloudflare; saat ini mencoba STUN langsung.'});
+    return res({ok:true,mode:'remote',strategy,iceServers:fallback,turnConfigured:false,turnStatus:'unavailable',turnWarning:'Relay TURN belum dapat dihubungi. Periksa CF_TURN_KEY_ID dan CF_TURN_API_TOKEN di Cloudflare; saat ini mencoba STUN langsung.'});
   }
  }
  if(p==='/api/calls/start'&&request.method==='POST'){
   const d=await deps.readJSON(request),chat=await member(env,trimmed(d.conversationId),me.id),kind=trimmed(d.kind);
-  const mode=d.mode==='remote'?'remote':'local';
-  if(d.mode!==undefined&&!['remote','local'].includes(d.mode))return bad('Mode panggilan tidak valid.');
-  if(mode==='remote'&&!await remoteApproved(env,me))return bad('Mode jarak jauh harus disetujui admin terlebih dahulu.',403);
+  // Otomatis diotorisasi sama seperti Jarak Jauh; tidak melewati persetujuan admin.
+  const strategy=['local','remote','auto'].includes(d.mode)?d.mode:'local';
+  if(d.mode!==undefined&&!['remote','local','auto'].includes(d.mode))return bad('Mode panggilan tidak valid.');
+  const mode=strategy==='local'?'local':'remote';
+  if(mode==='remote'&&!await remoteApproved(env,me))return bad('Mode otomatis/jarak jauh harus disetujui admin terlebih dahulu.',403);
   if(!chat||!['audio','video'].includes(kind))return bad('Percakapan atau jenis panggilan tidak valid.');
   const callee=chat.user_a===me.id?chat.user_b:chat.user_a;
   // Perlindungan panggilan pertama: harus pernah saling mengirim pesan (dua arah).
@@ -408,12 +416,16 @@ export async function handleExtra(request, env, me, deps){
   const id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO tc_call_sessions(id,chat_id,caller_id,callee_id,kind) VALUES(?,?,?,?,?)').bind(id,chat.id,me.id,callee,kind).run();
   await env.DB.prepare('INSERT INTO tc_call_modes(call_id,mode) VALUES(?,?)').bind(id,mode).run();
+  if(strategy==='auto')await env.DB.prepare('INSERT INTO tc_call_auto_strategies(call_id) VALUES(?)').bind(id).run();
   deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id},45);
   return res({ok:true,callId:id});
  }
  if(p==='/api/calls/incoming'&&request.method==='GET'){
-  const r=await env.DB.prepare(`SELECT c.id,c.chat_id,c.kind,COALESCE(m.mode,'local') AS mode,u.display_name AS caller_name,u.username AS caller_username
-    FROM tc_call_sessions c JOIN users u ON u.id=c.caller_id LEFT JOIN tc_call_modes m ON m.call_id=c.id
+  const r=await env.DB.prepare(`SELECT c.id,c.chat_id,c.kind,CASE WHEN a.call_id IS NOT NULL THEN 'auto' ELSE COALESCE(m.mode,'local') END AS mode,
+      u.display_name AS caller_name,u.username AS caller_username
+    FROM tc_call_sessions c JOIN users u ON u.id=c.caller_id
+    LEFT JOIN tc_call_modes m ON m.call_id=c.id
+    LEFT JOIN tc_call_auto_strategies a ON a.call_id=c.id
     WHERE c.callee_id=? AND c.status='ringing' AND c.created_at>datetime('now','-30 seconds')
     ORDER BY c.created_at DESC LIMIT 1`).bind(me.id).first();
   if(r){

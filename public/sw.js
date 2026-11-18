@@ -1,6 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-const CACHE='temanchat-v92-call-mode-flow';
-const ASSETS=['/style.css?v=9.2.0','/v6.css?v=9.2.0','/share.js?v=9.2.0','/app.js?v=9.2.0','/storage.js?v=9.2.0','/config.js?v=9.2.0','/auth.css?v=9.2.0','/auth.js?v=9.2.0','/confirm-email.js?v=9.2.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
+const CACHE='temanchat-v93-push-layout-turn';
+const ASSETS=['/style.css?v=9.3.0','/v6.css?v=9.3.0','/share.js?v=9.3.0','/app.js?v=9.3.0','/storage.js?v=9.3.0','/config.js?v=9.3.0','/auth.css?v=9.3.0','/auth.js?v=9.3.0','/confirm-email.js?v=9.3.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
@@ -78,12 +78,10 @@ self.addEventListener('push',event=>{
    await tcCloseCallNotification(d.callId);
   }
   if(d.kind==='call'&&typeof d.callId==='string'){
-    // Jangan tampilkan notifikasi panggilan yang sudah diakhiri saat push terlambat sampai.
-    try{const check=await fetch('/api/calls/state?callId='+encodeURIComponent(d.callId),{credentials:'same-origin',cache:'no-store'});
-     if(check.ok){const state=await check.json();if(state.call?.status!=='ringing')return;}
-     else return; // tidak bisa memverifikasi panggilan: hindari notifikasi kedaluwarsa
-    }catch{return}
-
+    // JANGAN menunda notifikasi panggilan untuk memeriksa state melalui jaringan.
+    // Saat HP terkunci, cookie / konektivitas dapat menunda fetch hingga panggilan selesai.
+    // Push ber-TTL pendek; panggilan selesai ditutup oleh event call_end,
+    // dan status tetap diverifikasi saat notifikasi diklik.
     tasks.push(fetch('/api/calls/ringing-ack',{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({callId:d.callId})})
       .then(r=>{if(!r.ok)console.warn('Call ringing acknowledgement',r.status)})
@@ -92,7 +90,9 @@ self.addEventListener('push',event=>{
   if(Number.isFinite(Number(d.unreadCount))&&typeof self.navigator?.setAppBadge==='function'){
    tasks.push(Promise.resolve().then(()=>Number(d.unreadCount)>0?self.navigator.setAppBadge(Number(d.unreadCount)):self.navigator.clearAppBadge()).catch(()=>{}));
   }
-  const notificationMode=await tcModeRead();
+  const notificationMode=await Promise.race([
+   tcModeRead(),new Promise(resolve=>setTimeout(()=>resolve('both'),700))
+  ]);
   tasks.push(self.registration.showNotification(String(d.title||'TemanChat').slice(0,90),{
    body:String(d.body||'Ada aktivitas baru').slice(0,180),icon:'/icons/icon-192.png',
    badge:'/icons/icon-192.png',tag:String(d.tag||'tc-event'),data:{url:safeUrl,kind:d.kind||'',callId:d.callId||''},renotify:true,

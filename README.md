@@ -1,3 +1,10 @@
+## TemanChat V9.3 BETA — Koneksi Otomatis & Notifikasi
+
+Mode Otomatis memilih sambungan WebRTC langsung atau TURN setelah izin
+admin disetujui, dengan Lokal/Jarak Jauh tetap tersedia manual. Tampilan
+panggilan dan notifikasi multi-perangkat diperbaiki. Baca
+`PANDUAN-V9.3-OTOMATIS-NOTIFIKASI-VC.txt` sebelum deployment.
+
 # TemanChat V8.4 FULL — Panggilan Lintas Jaringan & Identitas Google Drive
 
 Baca **PANDUAN-V8.4-TURN-GOOGLE-AKUN.txt** sebelum memasang.

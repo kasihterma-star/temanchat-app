@@ -139,26 +139,31 @@ async function transmit(env,row,payload,ttl=120){
   console.warn('Push rejected',res.status);return false;
  }catch(e){console.warn('Web Push failed',e.message);return false;}
 }
+// Pure recipient selection keeps background devices notified even when one device is foreground.
+// Exported for local regression tests only (not bound to any HTTP endpoint).
+export function selectPushRecipients(rows,payload){
+ return (rows||[]).filter(r=>!(payload?.kind==='message' &&
+   typeof payload.conversationId==='string' && r.focused_chat===payload.conversationId));
+}
 export async function sendPush(env,userId,payload,ttl=120){
  if(!env.VAPID_PRIVATE_KEY||!env.VAPID_PUBLIC_KEY||!userId)return;
  try{
   await ensurePushSchema(env);
-  // Jika salah satu perangkat sedang aktif melihat chat INI, jangan kirim Web Push.
-  // Status fokus kedaluwarsa cepat untuk menghindari membisukan setelah layar dikunci.
-  if(payload?.kind==='message'&&typeof payload.conversationId==='string'){
-   const focused=await env.DB.prepare(`SELECT 1 FROM tc_push_focus f
-     JOIN tc_push_subscriptions s ON s.id=f.subscription_id AND s.user_id=f.user_id
-     JOIN tc_push_device_links l ON l.subscription_id=s.id
-     JOIN sessions sess ON sess.id=l.session_id AND sess.revoked_at IS NULL AND sess.expires_at>datetime('now')
-     WHERE f.user_id=? AND f.chat_id=? AND f.updated_at>=datetime('now','-23 seconds') LIMIT 1`)
-    .bind(userId,payload.conversationId).first();
-   if(focused)return;
-  }
-  const rows=await env.DB.prepare(`SELECT s.id,s.endpoint,s.p256dh,s.auth FROM tc_push_subscriptions s
-    JOIN tc_push_device_links l ON l.subscription_id=s.id
-    JOIN sessions sess ON sess.id=l.session_id AND sess.user_id=s.user_id AND sess.revoked_at IS NULL AND sess.expires_at>datetime('now')
-    WHERE s.user_id=? LIMIT 8`).bind(userId).all();
-  await Promise.allSettled(rows.results.map(r=>transmit(env,r,payload,ttl)));
+  // Perangkat yang BENAR-BENAR sedang melihat chat ini tidak perlu pop-up.
+  // Jangan bungkam perangkat lain, termasuk PWA yang ditutup di HP lain.
+  // EXISTS mencegah langganan terkirim ganda jika ada beberapa sesi perangkat.
+  const rows=await env.DB.prepare(`SELECT s.id,s.endpoint,s.p256dh,s.auth,
+      CASE WHEN f.updated_at>=datetime('now','-16 seconds') THEN f.chat_id ELSE NULL END AS focused_chat
+    FROM tc_push_subscriptions s
+    LEFT JOIN tc_push_focus f ON f.subscription_id=s.id AND f.user_id=s.user_id
+    WHERE s.user_id=? AND EXISTS (
+      SELECT 1 FROM tc_push_device_links l
+      JOIN sessions sess ON sess.id=l.session_id AND sess.user_id=s.user_id
+        AND sess.revoked_at IS NULL AND sess.expires_at>datetime('now')
+      WHERE l.subscription_id=s.id
+    ) LIMIT 8`).bind(userId).all();
+  const targets=selectPushRecipients(rows.results,payload);
+  await Promise.allSettled(targets.map(r=>transmit(env,r,payload,ttl)));
  }catch(e){console.warn('Web push dispatch',e.message)}
 }
 
