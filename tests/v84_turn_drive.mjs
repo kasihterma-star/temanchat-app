@@ -14,5 +14,5 @@ assert.match(google,/drive\/v3\/about\?fields=user\(emailAddress,displayName\)/)
 assert.match(google,/accountEmail/);
 assert.match(app,/Terhubung: /);
 assert.match(app,/opts.turnConfigured/);
-assert.match(sw,/temanchat-v96-bottom-tabs-quick-call/);
+assert.match(sw,/temanchat-v97-adaptive-pages-chat-network/);
 console.log('PASS V8.4: Cloudflare ephemeral TURN + Google Drive linked account');
