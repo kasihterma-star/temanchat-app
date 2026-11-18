@@ -17,5 +17,5 @@ assert.match(app,/iceTransportPolicy:\(c.mode==='remote'\|\|c.mode==='auto'\)&&o
 assert.match(css,/V9\.9\.2 — dark-theme contrast hardening/);
 assert.match(css,/html\[data-theme="dark"\] #modal\.tc-page-view/);
 assert.match(css,/color:var\(--text-input\)!important/);
-assert.match(sw,/temanchat-v994-four-tabs/);
-console.log('PASS V9.9.4 access dates, auto relay, dark contrast');
+assert.match(sw,/temanchat-v995-responsive-layout/);
+console.log('PASS V9.9.5 access dates, auto relay, dark contrast');

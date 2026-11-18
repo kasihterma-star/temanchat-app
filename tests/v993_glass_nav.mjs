@@ -16,4 +16,4 @@ assert.match(css,/tc-glass-enter/);
 assert.match(css,/prefers-reduced-motion:reduce/);
 assert.match(css,/#modal\.tc-page-view\[open\]\{bottom:calc\(62px/);
 assert.match(css,/\.tc-bottom-nav\{z-index:1002/);
-console.log('PASS V9.9.4 nonmodal tabs, account shortcut, glass animation');
+console.log('PASS V9.9.5 nonmodal tabs, account shortcut, glass animation');

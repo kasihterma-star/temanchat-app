@@ -6,4 +6,4 @@ assert.match(app,/Riwayat belum bisa dimuat/);
 assert.match(app,/Coba lagi/);
 assert.match(app,/requestId===callHistoryRequestId/);
 assert.match(app,/\$\('tcNavCalls'\)\.onclick/);
-console.log('PASS PASS V9.9.4 dark theme contrast');
+console.log('PASS PASS V9.9.5 dark theme contrast');

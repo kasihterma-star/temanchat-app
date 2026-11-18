@@ -984,9 +984,9 @@ $('settingsBtn').onclick=()=>{
  modal(tcPage==='account'?'Akun Saya':'Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
  if(me?.is_admin)$('modalDesc').append(' ',officialBadge());
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
- const aboutBtn=element('button','tc-media-action tc-about-entry','ⓘ Tentang TemanChat · Versi 9.9.4');
+ const aboutBtn=element('button','tc-media-action tc-about-entry','ⓘ Tentang TemanChat · Versi 9.9.5');
  aboutBtn.type='button';aboutBtn.onclick=()=>{
-  modal('Tentang TemanChat V9.9.4','PWA TemanChat untuk pesan, panggilan suara, dan video.');
+  modal('Tentang TemanChat V9.9.5','PWA TemanChat untuk pesan, panggilan suara, dan video.');
   const c=$('modalContent');
   c.append(element('p','tc-about-paragraph','Panggilan masuk memakai Web Push dan dapat mengirim maksimal empat pengingat selama belum dijawab. Notifikasi bisa dipengaruhi pengaturan izin, baterai, atau kebijakan perangkat.'));
   c.append(element('p','tc-about-paragraph','Mode Otomatis saat akses disetujui memakai relay TURN seperti Mode Jarak Jauh. Mode Lokal tetap bisa dipilih manual dari Pengaturan.'));
@@ -1777,7 +1777,7 @@ async function tick(){
   if(now-lastListUpdate>8000){lastListUpdate=now;await fetchChats()}
  }finally{tickBusy=false}
 }
-// Navigasi bawah V9.9.4: empat halaman glass, tanpa overlay modal untuk tab utama.
+// Navigasi bawah V9.9.5: empat halaman glass, tanpa overlay modal untuk tab utama.
 function tcMarkNav(id){for(const key of ['tcNavChats','tcNavCalls','tcNavSettings','tcNavAccount']){
  const b=$(key);if(!b)continue;const yes=key===id;b.classList.toggle('tc-nav-active',yes);
  if(yes)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
@@ -1807,7 +1807,7 @@ async function init(){
   if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.9.4'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.9.5'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

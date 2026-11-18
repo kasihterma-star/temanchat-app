@@ -941,3 +941,92 @@ html[data-theme="dark"] #modal.tc-page-view .modal-head{background:rgba(34,37,39
  .tc-bottom-nav button small{font-size:10px!important;}
 }
 @media(prefers-reduced-motion:reduce){.tc-bottom-nav button{transition:none!important}}
+
+
+/* V9.9.5 — responsive navigation and independent message scrolling.
+   Mobile reserves actual viewport space for the bottom tab bar;
+   desktop navigation stays inside the sidebar footprint. */
+@media(min-width:741px){
+  .tc-bottom-nav{
+    left:max(25px,calc((100vw - 1420px)/2 + 8px))!important;
+    right:auto!important;bottom:max(20px,calc((100dvh - 840px)/2 + 10px))!important;
+    width:314px!important;max-width:calc(100vw - 50px)!important;
+    border-radius:17px!important;box-shadow:0 8px 22px rgba(0,0,0,.12)!important;
+  }
+  .tc-bottom-nav button{min-height:42px!important;padding:5px 1px!important;}
+  .tc-bottom-nav button span{font-size:17px!important;}
+  .tc-bottom-nav button small{font-size:10px!important;}
+  .sidebar .contacts{padding-bottom:84px!important;}
+  /* Keep toolbar buttons in one neat row: heading occupies its own line. */
+  .sidebar-title{display:flex!important;flex-wrap:wrap!important;gap:5px!important;padding:8px 12px!important;align-content:start;}
+  .sidebar-title h2{flex:0 0 100%;font-size:17px!important;margin:0 0 2px!important;}
+  .sidebar-title .round,.sidebar-title .tc-admin-entry,.sidebar-title .profile{
+    order:0!important;flex:0 0 auto!important;min-height:34px!important;height:34px!important;
+  }
+  .sidebar-title .round{width:34px!important;border-radius:10px!important;}
+  .sidebar-title .tc-admin-entry{font-size:10px!important;padding:5px 8px!important;}
+  .sidebar-title .profile{width:34px!important;min-width:34px!important;margin-left:0!important;border-radius:10px!important;}
+  .sidebar-title .profile>.avatar{width:30px!important;height:30px!important;border-radius:9px!important;}
+  .sidebar-title .tc-account-button{width:34px!important;}
+  .sidebar-title .tc-icon{width:17px!important;height:17px!important;min-width:17px!important;min-height:17px!important;}
+}
+/* The conversation itself never scrolls the entire layout; only its message list scrolls. */
+#app,.conversation,.sidebar{min-height:0!important;}
+.conversation{overflow:hidden!important;}
+#messages{
+  flex:1 1 0%!important;min-height:0!important;max-height:100%!important;
+  overflow-y:auto!important;overflow-x:hidden!important;
+  overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;
+  scrollbar-width:thin;scrollbar-color:var(--line-soft) transparent;
+}
+#contacts{min-height:0!important;overflow-y:auto!important;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;}
+#messageForm,.chathead{flex-shrink:0!important;}
+@media(max-width:740px){
+  html,body{height:100%!important;overscroll-behavior:none;}
+  :root{--tc-nav-space:calc(64px + env(safe-area-inset-bottom,0px));}
+  #app{
+    height:calc(100dvh - var(--tc-nav-space))!important;
+    max-height:calc(100dvh - var(--tc-nav-space))!important;
+    min-height:0!important;
+    grid-template-rows:minmax(0,1fr)!important;
+    overflow:hidden!important;
+  }
+  #sidebar.mobile-visible,#conversation:not(.mobile-hidden){
+    height:100%!important;min-height:0!important;max-height:100%!important;overflow:hidden!important;
+  }
+  #sidebar .contacts{flex:1 1 0%!important;min-height:0!important;overflow-y:auto!important;padding-bottom:14px!important;}
+  .conversation .messages{flex:1 1 0%!important;min-height:0!important;}
+  .conversation .compose{padding:9px 9px 11px!important;min-height:58px!important;}
+  .tc-bottom-nav{
+    position:fixed!important;left:0!important;right:0!important;bottom:0!important;
+    width:100%!important;max-width:100%!important;min-height:var(--tc-nav-space)!important;
+    box-sizing:border-box!important;padding:5px 7px calc(5px + env(safe-area-inset-bottom,0px))!important;
+    border-radius:16px 16px 0 0!important;gap:3px!important;
+  }
+  .tc-bottom-nav button{min-height:46px!important;max-height:55px!important;padding:5px 2px!important;}
+  .tc-bottom-nav button span{font-size:19px!important;}
+  .tc-bottom-nav button small{font-size:10px!important;}
+  .sidebar .profile{padding-bottom:0!important;}
+  .sidebar-title{flex-wrap:wrap!important;gap:5px!important;}
+  .sidebar-title h2{flex:0 0 100%;margin-bottom:2px!important;}
+  #modal.tc-page-view[open]{
+    bottom:var(--tc-nav-space)!important;height:calc(100dvh - var(--tc-nav-space))!important;
+    max-height:calc(100dvh - var(--tc-nav-space))!important;
+    overflow-y:auto!important;
+  }
+  .toast{bottom:calc(var(--tc-nav-space) + 10px)!important;}
+  #installBanner.tc-install-banner{bottom:calc(var(--tc-nav-space) + 10px)!important;}
+}
+@media(min-width:741px) and (max-width:1060px){
+  #app{grid-template-columns:300px minmax(0,1fr)!important;}
+  .tc-bottom-nav{width:284px!important;}
+  .sidebar-title{padding-left:9px!important;padding-right:9px!important;gap:4px!important;}
+  .sidebar-title .round,.sidebar-title .profile{width:31px!important;min-width:31px!important;}
+  .sidebar-title .tc-admin-entry{padding:4px 6px!important;}
+}
+@media(max-width:360px){
+  .tc-bottom-nav button small{font-size:9px!important;}
+  .sidebar-title .round{width:32px!important;height:34px!important;}
+  #messageForm{gap:5px!important;}
+}
+@media(prefers-reduced-motion:reduce){#messages,#contacts{scroll-behavior:auto!important;}}

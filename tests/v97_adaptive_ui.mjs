@@ -9,5 +9,5 @@ assert.match(app,/\$\('moreBtn'\)\.onclick=\(\)=>\{if\(!active\)/);
 assert.match(app,/dlg\.show\(\)/);
 assert.match(css,/#modal\.tc-page-view\[open\]/);
 assert.match(css, /var\(--accent-soft\)/);
-assert.match(html,/v=9\.9\.4/);
+assert.match(html,/v=9\.9\.5/);
 console.log('PASS V9.7 adaptive pages, theme variables, conversation network preferences');
