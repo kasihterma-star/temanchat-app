@@ -1,0 +1,8 @@
+TemanChat V9.1 — Indikator Mode Panggilan
+
+- Pada layar panggilan muncul label Mode Lokal atau Mode Jarak Jauh.
+- Mode penelepon ditampilkan langsung; pada penerima ditampilkan setelah konfigurasi panggilan diterima dari server (sebelumnya: Memeriksa mode panggilan).
+- Setelah tersambung, panggilan jarak jauh mencoba menampilkan jalur aktual: langsung atau relay TURN. Jika statistik browser tidak tersedia, keterangan awal tetap tampil.
+- Ini hanya penambahan tampilan/diagnostik; bukan perbaikan koneksi TURN dan bukan jaminan panggilan antarjaringan berhasil.
+- Tidak perlu migrasi database maupun Secret baru. Pengaturan mode tetap di Pengaturan → Mode panggilan.
+- Unggah seluruh berkas, commit/push ke repository GitHub untuk deployment Cloudflare, kemudian perbarui halaman PWA.

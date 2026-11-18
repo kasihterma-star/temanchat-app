@@ -1,3 +1,17 @@
+# TemanChat V8.4 FULL — Panggilan Lintas Jaringan & Identitas Google Drive
+
+Baca **PANDUAN-V8.4-TURN-GOOGLE-AKUN.txt** sebelum memasang.
+
+Yang baru:
+- WebRTC meminta ephemeral ICE servers dari Cloudflare Realtime TURN melalui Worker bila dua Secrets dikonfigurasi.
+- STUN fallback memberikan peringatan jelas jika TURN belum tersedia.
+- Google Drive pribadi menampilkan email akun terhubung lewat Drive API `about.get` dengan `drive.file` yang sudah ada.
+- Semua fitur V8.3 dipertahankan.
+
+**Dua Secret baru wajib agar panggilan beda jaringan memakai TURN:** `CF_TURN_KEY_ID` dan `CF_TURN_API_TOKEN`. Jangan disimpan di GitHub.
+
+**Catatan:** pengujian lokal memverifikasi struktur dan sintaks, tidak menguji jaringan WebRTC antar-HP atau kredensial Cloudflare sebenarnya.
+
 # TemanChat V7.6 — Rebuild bersih dari V7.5
 
 Sumber: ZIP V7.5 yang diunggah pengguna. Versi ini tidak memakai file repository GitHub yang sempat mengandung konflik merge.
@@ -74,3 +88,14 @@ Dari paket V8.0 FULL, ditambahkan pengelolaan sesi per perangkat dalam Pengatura
 **Catatan**: Login sebelum V8.1 tidak mempunyai riwayat terakhir aktif historis; akan mulai tercatat setelah perangkat dibuka. Login yang baru dilacak saat login. Nama perangkat dari user-agent hanyalah perkiraan.
 
 Langkah deploy, batasan dan uji perangkat ganda ada di `PANDUAN-V8.1-PERANGKAT-LOGIN.txt`.
+
+## V8.9 — Izin panggilan dan notifikasi admin
+- Semua akun tetap memakai **Panggilan Lokal** secara default. Mode jarak jauh hanya dapat dimulai oleh akun dengan izin admin yang berlaku; penerima tidak harus punya izin.
+- Admin terdaftar melalui Cloudflare Secret `TC_CALL_ADMIN_EMAIL` (email login akun `@admin`).
+- Pengajuan baru mengirim **Web Push** ke perangkat admin yang telah mengaktifkan notifikasi. Admin juga dapat membuka daftar pengajuan secara manual di Pengaturan.
+- Admin menyetujui izin selama 1, 7, 30 hari, atau tanpa batas waktu; bisa memperpanjang, menolak, atau mencabut.
+- Izin diverifikasi oleh server setiap kali mencoba **memulai** panggilan. Izin yang kedaluwarsa tidak mematikan panggilan yang sudah tersambung.
+- Database V8.8 tidak dihapus. Kolom `expires_at` ditambahkan otomatis saat endpoint diakses.
+- Fitur ini **tidak mengaktifkan TURN** atau menjamin panggilan beda jaringan. Jangan menyetujui penagihan Realtime tanpa mempertimbangkan biaya.
+
+Lihat `PANDUAN-V8.9-ADMIN-NOTIFIKASI.txt` untuk langkah instalasi dan pengujian.

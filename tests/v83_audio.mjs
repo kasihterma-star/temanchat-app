@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const app=fs.readFileSync('public/app.js','utf8');
+const sw=fs.readFileSync('public/sw.js','utf8');
+assert.match(app,/VOICE_SIGNAL_INTERVAL_MS=2500/);
+assert.match(app,/VOICE_DISCONNECT_GRACE_MS=12000/);
+assert.match(app,/function startVoiceSignalTimer/);
+assert.match(app,/function stopVoiceSignalTimer/);
+assert.match(app,/if\(!c\|\|c.pollBusy\)return/);
+assert.match(app,/finally\{c.pollBusy=false\}/);
+assert.match(app,/echoCancellation:true,noiseSuppression:true,autoGainControl:true/);
+assert.match(app,/media\.srcObject=e\.streams\?\.\[0\]\|\|new MediaStream/);
+assert.match(app,/document\.addEventListener\('pointerdown',resume\)/);
+assert.match(app,/detachVoiceResume\(c\)/);
+assert.match(app,/clearVoiceDisconnectTimer\(c\)/);
+assert.match(sw,/temanchat-v91-call-mode-display/);
+console.log('PASS V8.3: audio-only tuning, voice signaling, no overlapping requests, cleanup, autoplay retry');

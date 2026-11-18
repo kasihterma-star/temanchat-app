@@ -1,0 +1,32 @@
+TEMANCHAT V8.5 FULL — BAGIKAN APLIKASI & MOBILE BROWSER
+=========================================================
+Berbasis paket V8.4 FULL. Mempertahankan logika chat, panggilan, Google Drive, sesi perangkat, dan notifikasi.
+
+FITUR
+1. Tombol ikon Bagikan pada halaman daftar chat, termasuk ketika PWA belum diinstal.
+2. Tombol Bagikan di Pengaturan (tersedia setelah login).
+3. Tombol Bagikan di halaman Login/Daftar (tanpa perlu instal).
+4. Di browser yang mendukung Web Share, memakai menu share bawaan perangkat (bisa WhatsApp dan aplikasi terinstal lainnya).
+5. Di browser yang tidak mendukung, tersedia tautan WhatsApp, Telegram, email, dan tombol Salin Tautan; tanpa wajib login di layanan berbagi.
+6. Target sentuh minimum dan ukuran input mobile diperbaiki untuk HP, termasuk tampilan ketika masih dibuka sebagai tab browser.
+7. Tag gambar yang tidak valid pada banner pemasangan diperbaiki.
+8. SW cache dinaikkan ke temanchat-v85-mobile-share, agar CSS/JS terbaru dimuat setelah deployment.
+
+BATASAN TEKNIS
+- Mode browser dan mode PWA dapat membatasi mikrofon/kamera/notifikasi secara berbeda. Tidak dapat menjamin seluruh fungsi Web Push pada iOS/Safari tanpa instal ke Layar Utama.
+- Di iPhone, Web Push untuk web app memerlukan penambahan ke Layar Utama dan izin; mode Safari tab dapat menjalankan fitur chat jika syarat browser/izin terpenuhi.
+- Berbagi melalui menu bawaan hanya menampilkan aplikasi yang tersedia pada perangkat; menu fallback menyediakan tautan platform pilihan.
+- TURN lintas jaringan tetap memerlukan konfigurasi TURN yang benar. Paket ini tidak mengaktifkan TURN baru atau menyediakan relay gratis.
+
+CARA PASANG
+1. Cadangkan seluruh folder repo temanchat-app.
+2. Salin SELURUH ISI folder ZIP ini ke root repo temanchat-app; replace file yang sama.
+3. Commit & Push melalui GitHub Desktop.
+4. Pastikan Cloudflare Deployments READY.
+5. Di HP tanpa instal, buka https://chat.ege.my.id/auth.html dan klik Bagikan TemanChat.
+6. Login dari tab browser, buka daftar chat, tes tombol Bagikan dan Pengaturan.
+7. Coba chat, lampiran, kamera/mikrofon setelah browser meminta izin yang diperlukan.
+8. Tutup dan buka kembali PWA terpasang pada perangkat lama untuk memperbarui cache.
+
+PENGUJIAN
+Di folder proyek jalankan npm run check (butuh Node.js dan Python untuk tes lengkap).

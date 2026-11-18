@@ -1,0 +1,51 @@
+TEMANCHAT V8.4 FULL — TURN UNTUK PANGGILAN BEDA JARINGAN + EMAIL DRIVE
+
+MASALAH YANG DIPERBAIKI
+V8.3 hanya memakai STUN. Ketika kedua HP berada di NAT/jaringan berbeda, koneksi peer-to-peer bisa gagal.
+V8.4 menambahkan opsi Cloudflare Realtime TURN sebagai relay panggilan.
+
+CARA PASANG KODE
+1. Backup folder GitHub temanchat-app.
+2. Ekstrak ZIP V8.4. Salin seluruh isi folder hasil ekstrak ke folder temanchat-app, Replace.
+3. GitHub Desktop -> Commit to main -> Push origin.
+4. Cloudflare Deployments -> pastikan status Ready.
+5. Tutup dan buka lagi PWA di kedua HP.
+
+WAJIB SEBELUM MENGUJI BEDA JARINGAN: BUAT TURN KEY
+1. Masuk Cloudflare Dashboard -> Realtime -> TURN (jika tersedia).
+2. Buat TURN Key untuk TemanChat. Catat dua nilai:
+   - Key ID / UID dari TURN key (bukan Account ID).
+   - API Token / Key secret yang dikeluarkan khusus TURN key (bukan Cloudflare Global API Key).
+   Simpan token ini baik-baik. Lihat petunjuk resmi:
+   https://developers.cloudflare.com/realtime/turn/generate-credentials/
+3. Buka Workers & Pages -> temanchat-app -> Settings -> Variables and Secrets.
+   Tambahkan DUA nilai untuk lingkungan Production:
+   CF_TURN_KEY_ID = UID / Key ID TURN
+   CF_TURN_API_TOKEN = API Token milik TURN key
+   Gunakan Secret (encrypted); jangan masukkan ke repo atau chat.
+4. Simpan dan pastikan konfigurasi Worker efektif (deployment bila diminta).
+5. Coba telepon dua HP: satu Wi-Fi, satu paket data.
+
+CATATAN BIAYA
+Cloudflare Realtime TURN berbiaya jika dipakai tanpa Cloudflare Realtime SFU.
+Periksa biaya/penggunaan di https://developers.cloudflare.com/realtime/turn/
+
+CARA KERJA KEAMANAN
+- Secret TURN tidak pernah dikirim ke browser atau GitHub.
+- Worker meminta username + password TURN sementara dengan TTL 21600 detik (6 jam).
+- Browser hanya menerima kredensial sementara yang diperlukan WebRTC.
+- Jika Secret belum diisi atau TURN error, aplikasi tetap mencoba STUN namun memberi peringatan.
+- TURN membantu banyak kondisi NAT/firewall, tetapi tidak bisa menjamin semua jaringan yang memblokir koneksi.
+- Untuk panggilan yang sangat panjang > 6 jam perlu mekanisme perpanjangan TURN pada versi lanjutan.
+
+GOOGLE DRIVE
+- Pengaturan -> Penyimpanan & Media -> Google Drive pribadi menampilkan email akun yang terhubung.
+- Menggunakan Drive API about.get dengan scope drive.file yang sudah ada, TANPA izin OAuth baru.
+- Jika informasi akun gagal diperoleh, status koneksi tetap muncul dan dapat dicoba ulang.
+- Tidak perlu menghubungkan ulang Google Drive jika token masih valid.
+
+FITUR LAIN
+Chat, R2, pemberitahuan, PWA, pengelolaan sesi, Google OAuth, dan tampilan sebelumnya tidak dihapus.
+
+PEMERIKSAAN
+npm run check (seluruh tes lokal). Pengujian dua HP asli + TURN aktif tetap diperlukan.

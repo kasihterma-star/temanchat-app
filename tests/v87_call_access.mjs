@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const api=fs.readFileSync('src/extras.js','utf8');
+const ui=fs.readFileSync('public/app.js','utf8');
+for(const x of ['/api/calls/access/request','/api/calls/access/requests','/api/calls/access/review','TC_CALL_ADMIN_EMAIL',"mode==='remote'&&!await remoteApproved",'SELECT mode FROM tc_call_modes','iceServers:[]'])assert.ok(api.includes(x),x);
+assert.ok(ui.includes("'/api/calls/config?callId='"));
+assert.ok(ui.includes("localStorage.getItem(CALL_MODE_KEY)"));
+assert.ok(ui.includes('Pengajuan panggilan jarak jauh'));
+assert.ok(ui.includes('mode=remoteCallGranted'));
+console.log('PASS V8.7 call modes and server gate');

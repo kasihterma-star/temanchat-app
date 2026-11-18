@@ -1,0 +1,12 @@
+TemanChat V8.9 FULL — Notifikasi pengajuan dan masa berlaku izin
+
+1. Cadangkan folder temanchat-app; ekstrak ZIP dan REPLACE seluruh isinya, commit lalu Push origin.
+2. Pastikan Cloudflare Worker Production memiliki Secret TC_CALL_ADMIN_EMAIL = email login akun @admin. Tidak perlu mengubah username dan D1 secara manual.
+3. Bila Web Push admin telah diaktifkan dan perangkat mengizinkan notifikasi, saat akun lain menekan Ajukan Izin, admin mendapat push. Ketuk untuk membuka Pengaturan > Pengajuan Panggilan.
+4. Admin dapat menyetujui selama 1 hari, 7 hari, 30 hari, atau tanpa batas waktu; tombol Tolak / Cabut membatalkan izin.
+5. Pengguna yang diizinkan dapat memulai panggilan jarak jauh ke pengguna tanpa izin; penerima tidak perlu memiliki izin. Pengguna tanpa izin tetap dapat memulai panggilan lokal.
+6. Kedaluwarsa diverifikasi server saat panggilan DIMULAI. Panggilan yang sudah berlangsung tidak otomatis diputus pada detik izin kedaluwarsa.
+7. Mode lokal tetap DEFAULT dan tidak memakai TURN. Mode jarak jauh memerlukan rute WebRTC yang berfungsi; izin admin bukan TURN dan tidak menjamin koneksi beda jaringan.
+8. Notifikasi admin adalah Web Push, tidak berupa email. Pengiriman push bisa terlambat atau gagal karena izin/browser/OS/koneksi. Daftar pengajuan di D1 tetap sumber kebenaran.
+9. Database lama dipertahankan. Worker akan menambahkan kolom expires_at pada tabel tc_remote_call_access saat fitur digunakan. Akses lama yang sudah approved tetap tanpa batas waktu sampai admin memperbaruinya.
+10. TURN Cloudflare tidak perlu diaktifkan untuk memakai fitur V8.9 ini; mengaktifkan Realtime dapat membutuhkan persetujuan penagihan usage-based.

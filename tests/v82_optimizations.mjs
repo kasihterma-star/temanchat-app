@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const app=fs.readFileSync('public/app.js','utf8');
+const sw=fs.readFileSync('public/sw.js','utf8');
+const css=fs.readFileSync('public/v6.css','utf8');
+assert.match(app,/const passError=element\('small','tc-device-error'/);
+assert.match(app,/showPassError\(e.message\|\|'Gagal memverifikasi sandi.'/);
+assert.match(app,/if\(!me\|\|tickBusy\)return/);
+assert.match(app,/if\(document.hidden\)\{[\s\S]*?return;/);
+assert.match(app,/if\(!document.hidden&&active\)void refreshPartnerTyping\(\)/);
+assert.match(css,/tc-device-error:not\(\[hidden\]\)/);
+assert.match(sw,/const staticAsset=ASSETS.includes/);
+assert.match(sw,/if\(staticAsset\)\{const cached=await caches.match\(request\)/);
+assert.match(sw,/temanchat-v91-call-mode-display/);
+console.log('PASS V8.2: inline auth errors, non-overlap polling, hidden-tab efficiency, versioned static cache');

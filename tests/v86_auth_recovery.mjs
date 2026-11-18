@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const js=readFileSync('public/auth.js','utf8'), html=readFileSync('public/auth.html','utf8'), sw=readFileSync('public/sw.js','utf8');
+assert.match(js,/typeof window\.turnstile\?\.render==='function'/);
+assert.match(js,/loadTurnstileScript\(2\)/);
+assert.match(js,/addEventListener\('pageshow'/);
+assert.match(js,/retrySecurityBtn/);
+assert.match(js,/location\.reload\(\)/);
+assert.doesNotMatch(js,/setInterval\([^)]*location\.reload/);
+assert.match(html,/id="retrySecurityBtn"/);
+assert.match(html,/id="reloadPageBtn"/);
+assert.match(html,/auth\.js\?v=9\.1\.0/);
+assert.match(sw,/temanchat-v91-call-mode-display/);
+console.log('PASS V8.6: Turnstile readiness, bounded retry, recovery actions and cache version');

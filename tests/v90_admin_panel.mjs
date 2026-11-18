@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const api=read('src/extras.js'),ui=read('public/app.js'),html=read('public/index.html'),style=read('public/v6.css');
+assert.match(api,/\/api\/calls\/access\/users/);
+assert.match(api,/if\(!isCallAdmin\(env,me\)\)return bad\('Hanya administrator/);
+assert.match(api,/SELECT usr\.id AS user_id/);
+assert.match(api,/instr\(lower\(usr\.username\),lower\(\?\)\)/);
+assert.match(api,/INSERT INTO tc_remote_call_access\(user_id,state,requested_at,reviewed_at,reviewed_by,expires_at\)/);
+assert.match(api,/ON CONFLICT\(user_id\) DO UPDATE SET state=excluded\.state/);
+assert.match(html,/id="adminPanelBtn".*hidden/);
+assert.match(ui,/if\(adminEntry\)adminEntry\.hidden=!me\.is_admin/);
+assert.match(ui,/function openAdminPanel/);
+assert.match(ui,/await post\('\/api\/calls\/access\/review'/);
+assert.match(ui,/\['forever','Tanpa batas waktu'\]/);
+assert.match(style,/\.tc-admin-panel\{/);
+console.log('PASS V9.0: admin-only searchable directory, direct grants, revocation and dedicated panel');

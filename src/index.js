@@ -63,7 +63,7 @@ async function userSession(req,env){
   const token=cookie(req,'tc_session');if(!token||!/^[0-9a-f]{64}$/.test(token))return null;
   return env.DB.prepare('SELECT u.id,u.username,u.email,u.display_name,u.email_verified,s.id AS session_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>datetime(\'now\') AND u.email_verified=1 LIMIT 1').bind(await sha(token)).first();
 }
-const publicUser=u=>({id:u.id,username:u.username,email:u.email,display_name:u.display_name,email_verified:u.email_verified});
+const publicUser=(u,env)=>({id:u.id,username:u.username,email:u.email,display_name:u.display_name,email_verified:u.email_verified,is_admin:!!(env.TC_CALL_ADMIN_EMAIL&&u.email&&u.email.toLowerCase()===String(env.TC_CALL_ADMIN_EMAIL).trim().toLowerCase())});
 // Foto profil mini (JPEG, maksimal 60 KB per akun). Terpisah dari R2 media chat.
 // Hanya pengguna terautentikasi yang dapat melihat foto; akun hanya mengubah fotonya sendiri.
 let avatarSchemaPromise;
@@ -179,7 +179,7 @@ export default {
     if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.4.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:Boolean(env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET)});
     if(path==='/api/auth/config'&&request.method==='GET')return reply({siteKey:SITE_KEY,authReady:Boolean(env.DB&&env.RESEND_API_KEY&&env.TURNSTILE_SECRET_KEY)});
     if(path==='/api/auth/me'&&request.method==='GET'){
-      const u=await userSession(request,env);if(u)await touchDevice(env,u,request.headers.get('User-Agent'));return u?reply({ok:true,user:publicUser(u)}):reply({ok:false},401);
+      const u=await userSession(request,env);if(u)await touchDevice(env,u,request.headers.get('User-Agent'));return u?reply({ok:true,user:publicUser(u,env)}):reply({ok:false},401);
     }
     if(path.startsWith('/api/avatar/')&&request.method==='GET'){
       const me=await userSession(request,env);
@@ -247,7 +247,7 @@ export default {
         await ensureDeviceSchema(env);
         await env.DB.prepare("INSERT INTO sessions(id,user_id,token_hash,device_name,expires_at) VALUES(?,?,?,?,datetime('now','+30 days'))").bind(sessionId,u.id,await sha(token),clean(d.deviceName).slice(0,80)||'Browser').run();
         await logDeviceLogin(env,sessionId,u.id,request.headers.get('User-Agent'));
-        const r=reply({ok:true,user:publicUser(u)});r.headers.set('Set-Cookie',sessionCookie(token,30*86400));return r;
+        const r=reply({ok:true,user:publicUser(u,env)});r.headers.set('Set-Cookie',sessionCookie(token,30*86400));return r;
       }
       if(path==='/api/auth/forgot'){
         if(!await limit(request,env,'forgot',3))return reply({error:'Terlalu banyak percobaan. Coba lagi nanti.'},429);
@@ -363,7 +363,7 @@ export default {
         const name=clean(d.displayName);
         if(name.length<2||name.length>60||/[\x00-\x1f\x7f]/.test(name))return reply({error:'Nama panggilan harus 2–60 karakter.'},400);
         await env.DB.prepare('UPDATE users SET display_name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(name,me.id).run();
-        return reply({ok:true,user:{...publicUser(me),display_name:name}});
+        return reply({ok:true,user:{...publicUser(me,env),display_name:name}});
       }
       if(path==='/api/auth/devices/revoke'){
         const me=await userSession(request,env);
@@ -453,7 +453,8 @@ export default {
           FROM users u LEFT JOIN tc_user_presence p ON p.user_id=u.id
           WHERE u.email_verified=1 AND u.id!=? AND u.username LIKE ?
           ORDER BY u.username LIMIT 15`).bind(me.id,q+'%').all();
-        return reply({ok:true,people:found.results});
+        const admin=env.TC_CALL_ADMIN_EMAIL?await env.DB.prepare('SELECT username FROM users WHERE email=? COLLATE NOCASE LIMIT 1').bind(String(env.TC_CALL_ADMIN_EMAIL).trim()).first():null;
+        return reply({ok:true,people:found.results.map(u=>({...u,is_admin:Number(u.username===admin?.username)}))});
       }
       if(path==='/api/chat/start'&&request.method==='POST'){
         let d;try{d=await readJSON(request)}catch{return reply({error:'Permintaan tidak valid'},400)}
@@ -495,7 +496,8 @@ export default {
           LEFT JOIN tc_user_presence p ON p.user_id=u.id
           WHERE c.user_a=? OR c.user_b=?
           ORDER BY COALESCE(last_time,c.created_at) DESC LIMIT 100`).bind(me.id,me.id,me.id,me.id,me.id,me.id).all();
-        return reply({ok:true,conversations:result.results});
+        const admin=env.TC_CALL_ADMIN_EMAIL?await env.DB.prepare('SELECT username FROM users WHERE email=? COLLATE NOCASE LIMIT 1').bind(String(env.TC_CALL_ADMIN_EMAIL).trim()).first():null;
+        return reply({ok:true,conversations:result.results.map(c=>({...c,other_is_admin:Number(c.other_username===admin?.username)}))});
       }
       if(path==='/api/chat/messages'&&request.method==='GET'){
         await ensureReceiptSchema(env);
