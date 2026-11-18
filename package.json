@@ -1,6 +1,6 @@
 {
   "name": "temanchat-app",
-  "version": "9.9.0-beta",
+  "version": "9.9.1-beta",
   "private": true,
   "type": "module",
   "scripts": {

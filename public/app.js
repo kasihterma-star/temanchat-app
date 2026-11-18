@@ -849,26 +849,43 @@ function modal(title,text,buttons=[]){const page=/^(Pengaturan TemanChat|Riwayat
 $('closeModal').onclick=()=>$('modal').close();
 $('moreBtn').onclick=()=>{if(!active)return toast('Pilih percakapan terlebih dahulu.');void openCallSetup(null);};
 // Riwayat tersimpan di D1, bukan hanya saat browser terbuka.
+let callHistoryRequestId=0;
+// Halaman riwayat tetap dapat dibuka bila hasil API kosong, gagal, atau berasal dari worker lama.
 async function showCallHistory(){
-  modal('Riwayat panggilan','Panggilan masuk, keluar, dan tidak terjawab dari akun ini.');
-  const box=$('modalContent');box.replaceChildren(element('p','tc-hint','Memuat riwayat…'));
+  const requestId=++callHistoryRequestId;
+  modal('Riwayat panggilan','Panggilan suara dan video masuk, keluar, serta tidak terjawab.');
+  const box=$('modalContent');
+  const isCurrent=()=>requestId===callHistoryRequestId&&$('modal').open&&$('modalTitle').textContent==='Riwayat panggilan';
+  box.replaceChildren(element('p','tc-hint','Memuat riwayat…'));
   try{
-    const data=await api('/api/calls/history');box.replaceChildren();
-    if(!data.calls.length){box.append(element('p','tc-hint','Belum ada riwayat panggilan.'));return}
+    const data=await api('/api/calls/history');
+    if(!isCurrent())return;
+    box.replaceChildren();
+    const calls=Array.isArray(data?.calls)?data.calls:[];
+    if(!calls.length){box.append(element('p','tc-hint','Belum ada riwayat panggilan.'));return}
     const list=element('div','tc-call-history');
-    for(const c of data.calls){
+    for(const c of calls){
+      if(!c||typeof c!=='object')continue;
       const item=element('div','tc-call-history-item');
       const symbol=c.direction==='outgoing'?'↗':'↙';
       const missed=c.status==='missed'||c.status==='declined';
-      const status=c.status==='ringing'?'Sedang memanggil':c.status==='missed'?'Tak terjawab':c.status==='declined'?'Ditolak':c.status==='answered'?'Terjawab':'Selesai';
-      const heading=element('div','tc-call-history-person',(missed?'☎ ':'')+symbol+' '+(c.other_name||'Teman'));
+      const statuses={ringing:'Sedang memanggil',missed:'Tak terjawab',declined:'Ditolak',answered:'Terjawab',ended:'Selesai'};
+      const status=statuses[c.status]||'Selesai';
+      const heading=element('div','tc-call-history-person',(missed?'☎ ':'')+symbol+' '+(c.other_name||c.other_username||'Teman'));
       if(missed)heading.classList.add('tc-call-missed');
-      const details=element('small','',`${c.kind==='video'?'Video':'Suara'} · ${status} · ${smallTime(c.created_at)}`);
-      const date=element('small','',String(c.created_at||'').slice(0,10));
+      const rawTime=typeof c.created_at==='string'?c.created_at:'';
+      const details=element('small','',`${c.kind==='video'?'Video':'Suara'} · ${status} · ${smallTime(rawTime)}`);
+      const date=element('small','',rawTime.slice(0,10));
       item.append(heading,details,date);list.append(item);
     }
-    box.append(list);
-  }catch(e){box.replaceChildren(element('p','tc-hint','Riwayat belum bisa dimuat: '+e.message))}
+    box.append(list.childElementCount?list:element('p','tc-hint','Belum ada riwayat panggilan.'));
+  }catch(e){
+    if(!isCurrent())return;
+    box.replaceChildren();
+    box.append(element('p','tc-hint','Riwayat belum bisa dimuat. Periksa koneksi lalu coba lagi.'));
+    const retry=element('button','primary','↻ Coba lagi');retry.type='button';retry.onclick=()=>{void showCallHistory()};box.append(retry);
+    console.warn('Gagal membuka riwayat panggilan:',e);
+  }
 }
 $('callHistoryBtn').onclick=showCallHistory;
 // V9.0 Panel Admin terpisah: daftar dan pencarian izin langsung berbasis server.
@@ -944,7 +961,7 @@ $('settingsBtn').onclick=()=>{
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
  const aboutBtn=element('button','tc-media-action tc-about-entry','ⓘ Tentang TemanChat · Versi 9.8');
  aboutBtn.type='button';aboutBtn.onclick=()=>{
-  modal('Tentang TemanChat V9.9','PWA TemanChat untuk pesan, panggilan suara, dan video.');
+  modal('Tentang TemanChat V9.9.1','PWA TemanChat untuk pesan, panggilan suara, dan video.');
   const c=$('modalContent');
   c.append(element('p','tc-about-paragraph','Panggilan masuk memakai Web Push dan dapat mengirim maksimal empat pengingat selama belum dijawab. Notifikasi bisa dipengaruhi pengaturan izin, baterai, atau kebijakan perangkat.'));
   c.append(element('p','tc-about-paragraph','Mode Otomatis saat akses disetujui memakai relay TURN seperti Mode Jarak Jauh. Mode Lokal tetap bisa dipilih manual dari Pengaturan.'));
@@ -1745,7 +1762,7 @@ async function init(){
   if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.9'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.9.1'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
