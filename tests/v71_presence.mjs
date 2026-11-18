@@ -14,8 +14,13 @@ assert.match(app,/presenceLabel\(c\)/);
 assert.match(app,/tc-presence-dot/);
 assert.match(css,/\.tc-presence-dot\.online/);
 assert.match(css,/\.tc-status-online/);
+<<<<<<< HEAD
 assert.match(html,/v=9\.1\.0/);
 assert.match(sw,/temanchat-v91-call-mode-display/);
+=======
+assert.match(html,/v=9\.0\.0/);
+assert.match(sw,/temanchat-v90-admin-panel/);
+>>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
 assert.match(worker,/const PRESENCE_OFFLINE_SECONDS=110/);
 assert.match(worker,/CREATE TABLE IF NOT EXISTS tc_user_presence/);
 assert.match(worker,/last_active_at>=CAST\(strftime\('%s','now'\) AS INTEGER\)/);

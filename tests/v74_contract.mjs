@@ -13,7 +13,12 @@ assert.match(ex,/datetime\('now','\+3 days'\)/);
 assert.match(store,/return localStorage.getItem\('tc_media_destination'\)\|\|'none'/);
 assert.match(store,/showDirectoryPicker/);
 assert.match(css,/tc-media-notice/);
+<<<<<<< HEAD
 assert.match(sw,/temanchat-v91-call-mode-display/);
 assert.match(html,/v=9\.1\.0/);
+=======
+assert.match(sw,/temanchat-v90-admin-panel/);
+assert.match(html,/v=9\.0\.0/);
+>>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
 assert.match(read('wrangler.jsonc'),/"binding":"MEDIA"/);
 console.log('PASS V7.5 inherited: server replies, voice memo, media preferences, one-time notice, app version, R2 binding');

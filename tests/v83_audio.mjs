@@ -13,5 +13,9 @@ assert.match(app,/media\.srcObject=e\.streams\?\.\[0\]\|\|new MediaStream/);
 assert.match(app,/document\.addEventListener\('pointerdown',resume\)/);
 assert.match(app,/detachVoiceResume\(c\)/);
 assert.match(app,/clearVoiceDisconnectTimer\(c\)/);
+<<<<<<< HEAD
 assert.match(sw,/temanchat-v91-call-mode-display/);
+=======
+assert.match(sw,/temanchat-v90-admin-panel/);
+>>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
 console.log('PASS V8.3: audio-only tuning, voice signaling, no overlapping requests, cleanup, autoplay retry');

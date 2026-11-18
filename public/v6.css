@@ -566,8 +566,11 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 .tc-admin-actions button{border:0;border-radius:9px;padding:9px 6px;font-size:11px;font-weight:700}
 .tc-admin-approve{background:var(--accent);color:#fff}.tc-admin-revoke{background:rgba(206,62,69,.12);color:#c24d56}
 @media(max-width:550px){.tc-admin-search{grid-template-columns:1fr}.tc-admin-actions{grid-template-columns:1fr 1fr}.tc-admin-actions select{grid-column:span 2}}
+<<<<<<< HEAD
 
 /* V9.1: mode panggilan selalu terlihat jelas, termasuk di layar masuk. */
 .tc-call-mode-badge{display:table;margin:10px auto 1px;padding:7px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.13);color:#fff;font-size:13px;font-weight:800;letter-spacing:.01em;text-align:center;position:relative;z-index:2}
 .tc-call-mode-badge[data-mode="remote"]{background:rgba(32,145,225,.24);border-color:rgba(125,204,255,.65)}
 .tc-call-mode-badge[data-mode="local"]{background:rgba(38,166,106,.22);border-color:rgba(142,239,190,.6)}
+=======
+>>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94

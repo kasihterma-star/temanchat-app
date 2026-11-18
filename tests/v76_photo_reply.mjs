@@ -13,5 +13,9 @@ assert.match(app,/ctx\.scale\(-1,1\)/);
 assert.match(app,/new File\(\[blob\]/);
 assert.match(css,/\.tc-photo-preview-frame img/);
 assert.match(css,/#messages \.bubble\{max-width:min\(83%/);
+<<<<<<< HEAD
 assert.match(sw,/temanchat-v91-call-mode-display/);
+=======
+assert.match(sw,/temanchat-v90-admin-panel/);
+>>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
 console.log('PASS V7.6: photo modal, manual mirror, cancel guard, reply viewport and cache');

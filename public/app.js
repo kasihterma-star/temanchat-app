@@ -1416,8 +1416,12 @@ $('muteCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const tr
 $('cameraCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getVideoTracks())track.enabled=!track.enabled;$('cameraCall').querySelector('span').textContent=c.stream.getVideoTracks()[0]?.enabled?'Kamera aktif':'Kamera mati';};
 async function preparePeer(c){
  const opts=await api('/api/calls/config?callId='+encodeURIComponent(c.id));
+<<<<<<< HEAD
  c.mode=opts.mode==='remote'?'remote':'local';
  if(currentCall===c)setCallModeDisplay(c.mode,c.mode==='remote'?(opts.turnConfigured?'TURN tersedia; memeriksa jalur koneksi…':'TURN belum tersedia; mencoba STUN langsung'):'Hanya LAN / Wi-Fi yang saling terhubung');
+=======
+ const hint=$('callModeHint');if(hint)hint.textContent=opts.mode==='remote'?'Mode jarak jauh: koneksi langsung atau TURN bila tersedia':'Mode lokal: hanya LAN / Wi-Fi yang saling terhubung';
+>>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
  if(opts.mode==='remote'&&!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'Mode jarak jauh sedang mencoba STUN langsung. Jika gagal, perlu TURN.');
  const constraints=c.kind==='audio'
   ? {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}
@@ -1505,7 +1509,11 @@ async function startCall(kind){
  try{
   const mode=remoteCallGranted&&localStorage.getItem(CALL_MODE_KEY)==='remote'?'remote':'local';
   const d=await post('/api/calls/start',{conversationId:active.id,kind,mode});
+<<<<<<< HEAD
   const c={id:d.callId,kind,mode,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
+=======
+  const c={id:d.callId,kind,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
+>>>>>>> e22bf38bc68cb1d58b392fb40484ca1565020f94
   // Batasi panggilan tidak terjawab ~30 detik tanpa menunggu cron 1 menit.
   c.timeoutTimer=setTimeout(async()=>{
    if(currentCall!==c||c.connectedAt)return;
