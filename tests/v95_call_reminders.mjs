@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const push=readFileSync('src/push.js','utf8');
+const index=readFileSync('src/index.js','utf8');
+const extras=readFileSync('src/extras.js','utf8');
+const sw=readFileSync('public/sw.js','utf8');
+assert.match(push,/attempt<4/);
+assert.match(push,/setTimeout\(resolve,5000\)/);
+assert.match(push,/status='ringing'/);
+assert.match(push,/created_at>datetime\('now','-30 seconds'\)/);
+assert.match(index,/waitUntil\(sendRingingCallPushes/);
+assert.match(extras,/if\(deps\.sendCallAlerts\)/);
+assert.match(sw,/d\.kind==='call'\?\[300,120,300,120,500,200,300\]/);
+assert.match(sw,/temanchat-v95-call-push-reminders/);
+console.log('PASS V9.5: pengingat panggilan maksimal empat, berhenti bila bukan ringing, push background, getar khusus.');

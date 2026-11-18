@@ -1247,7 +1247,7 @@ $('settingsBtn').onclick=()=>{
      adminRequests.append(item);
    }
  }
- wrap.append(callTitle,callMode,accessText,requestAccess,element('small','','Mode Otomatis memilih jalur langsung atau relay TURN sesuai kondisi jaringan. Mode Lokal memakai jalur langsung; Mode Jarak Jauh memakai relay TURN saat siap.'),adminRequests);
+ wrap.append(callTitle,callMode,accessText,requestAccess,element('small','','Mode Otomatis memakai relay TURN bila tersedia agar tetap terhubung di Wi-Fi yang sama atau berbeda. Mode Lokal memakai jalur langsung; Mode Jarak Jauh memakai relay TURN saat siap.'),adminRequests);
  void refreshCallAccess();
  const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{
    try{
@@ -1384,7 +1384,7 @@ function setCallModeDisplay(mode,detail){
  if(!badge||!hint)return;
  badge.dataset.mode=mode==='auto'?'auto':mode==='remote'?'remote':mode==='local'?'local':'pending';
  badge.textContent=mode==='auto'?'Mode Otomatis':mode==='remote'?'Mode Jarak Jauh':mode==='local'?'Mode Lokal':'Memeriksa mode panggilan…';
- hint.textContent=detail||(mode==='auto'?'Mencari sambungan tercepat, TURN jika dibutuhkan':mode==='remote'?'Menyambungkan lewat relay TURN':mode==='local'?'Perangkat di LAN / Wi-Fi yang saling terhubung':'Mengambil konfigurasi dari server…');
+ hint.textContent=detail||(mode==='auto'?'TURN jika tersedia, koneksi langsung jika tidak':mode==='remote'?'Menyambungkan lewat relay TURN':mode==='local'?'Perangkat di LAN / Wi-Fi yang saling terhubung':'Mengambil konfigurasi dari server…');
 }
 async function showCallPath(c){
  if(currentCall!==c||!c.pc||!c.connectedAt)return;
@@ -1444,7 +1444,7 @@ async function preparePeer(c){
  const opts=await api('/api/calls/config?callId='+encodeURIComponent(c.id));
  c.mode=opts.strategy==='auto'?'auto':opts.mode==='remote'?'remote':'local';
  if(currentCall===c)setCallModeDisplay(c.mode,c.mode==='auto'?
-   (opts.turnConfigured?'Mencoba jalur langsung · relay TURN siap sebagai alternatif':'Mencoba koneksi langsung · relay TURN belum siap'):
+   (opts.turnConfigured?'Menghubungkan melalui relay TURN · stabil di Wi-Fi sama atau berbeda':'TURN tidak tersedia · mencoba koneksi langsung'):
    c.mode==='remote'?(opts.turnConfigured?'Mengutamakan relay TURN · bisa di Wi-Fi yang sama/berbeda':'TURN belum siap · mencoba STUN langsung'):
    'Menggunakan jalur langsung di Wi-Fi/LAN');
  if(opts.mode==='remote'&&!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'TURN belum tersedia; mencoba sambungan langsung STUN.');
@@ -1453,12 +1453,13 @@ async function preparePeer(c){
   : {audio:true,video:true};
  const stream=await navigator.mediaDevices.getUserMedia(constraints);
  if(currentCall!==c){stream.getTracks().forEach(t=>t.stop());return}
- // Auto: iceTransportPolicy all lets ICE select host/STUN/TURN on BOTH peers.
- // Manual remote: prefer relay-only; local: no TURN. Choice is stored on server per call.
- // When TURN is unavailable, 'auto' still attempts direct transport and reports warning.
+ // V9.4: Mode Otomatis menggunakan relay TURN ketika siap, termasuk saat satu Wi-Fi.
+ // Ini menghindari jalur host yang tampak tersedia tetapi terhalang isolasi klien/NAT.
+ // Jika TURN tidak tersedia, ICE all masih mengizinkan direct/STUN sebagai alternatif.
+ // Kedua peer membaca strategi yang sama dari server sehingga kebijakan ICE konsisten.
  c.stream=stream;c.pc=new RTCPeerConnection({
   iceServers:opts.iceServers,
-  iceTransportPolicy:c.mode==='remote'&&opts.turnConfigured?'relay':'all'
+  iceTransportPolicy:(c.mode==='remote'||c.mode==='auto')&&opts.turnConfigured?'relay':'all'
  });
  c.turnRelayPreferred=c.mode==='remote'&&!!opts.turnConfigured;
  c.autoNetwork=c.mode==='auto';
@@ -1581,7 +1582,7 @@ async function openCallSetup(kind){
   b.append(words,element('span','tc-call-tile-check','✓'));
   return b;
  };
- const autoTile=makeTile('auto','✦','Otomatis · Disarankan','Memilih jalur tercepat · TURN bila dibutuhkan');
+ const autoTile=makeTile('auto','✦','Otomatis · Disarankan','TURN saat tersedia · kompatibel dengan Wi-Fi yang sama/berbeda');
  const localTile=makeTile('local','⌂','Jaringan Lokal','Langsung · Wi-Fi/LAN yang saling terhubung');
  const remoteTile=makeTile('remote','◎','Jarak Jauh','Relay TURN · Wi-Fi yang sama atau berbeda');
  choice.append(autoTile,localTile,remoteTile);
@@ -1695,7 +1696,7 @@ async function init(){
   if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.3'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.5'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

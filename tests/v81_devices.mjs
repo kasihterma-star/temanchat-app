@@ -16,7 +16,7 @@ assert.match(app,/sessionId:session\.id,password:pass\.value/);
 assert.match(app,/if\(!session\.current\)/);
 assert.match(push,/tc_push_device_links/);
 assert.match(push,/sess\.revoked_at IS NULL/);
-assert.match(sw,/temanchat-v93-push-layout-turn/);
+assert.match(sw,/temanchat-v95-call-push-reminders/);
 assert.equal(deviceLabel('Mozilla/5.0 (Linux; Android 14) AppleWebKit Chrome/120.0'),'Android · Chrome');
 assert.equal(deviceLabel('Mozilla/5.0 (Windows NT 10.0) AppleWebKit Edg/122'),'Windows · Edge');
 const sid='11111111-1111-4111-8111-111111111111',target='22222222-2222-4222-8222-222222222222';

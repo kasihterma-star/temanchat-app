@@ -1,0 +1,11 @@
+TemanChat V9.4 BETA — stabilitas panggilan dan layout
+
+Perubahan:
+- Mode Otomatis memakai TURN relay jika kredensial siap, baik satu Wi-Fi maupun beda jaringan. Jika TURN tidak siap, mencoba koneksi langsung (ICE all).
+- Mode Lokal masih memakai jalur langsung; Jarak Jauh masih mengutamakan TURN.
+- Modal panggilan diperbaiki memakai lapisan posisi tetap agar tombol, avatar dan video tidak bergeser ketika status berubah.
+- Cache PWA dan label versi diganti menjadi V9.4.
+
+CATATAN: Karena prioritas TURN, Mode Otomatis dapat memakai bandwidth relay meski kedua perangkat satu Wi-Fi. Perlu internet dan kredensial TURN yang berfungsi. Ini kompromi keandalan untuk jaringan dengan isolasi klien.
+
+Pengujian: tes otomatis lokal bukan pengganti uji langsung pada dua perangkat. Pastikan kedua perangkat sudah memuat V9.4.

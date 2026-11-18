@@ -1,6 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-const CACHE='temanchat-v93-push-layout-turn';
-const ASSETS=['/style.css?v=9.3.0','/v6.css?v=9.3.0','/share.js?v=9.3.0','/app.js?v=9.3.0','/storage.js?v=9.3.0','/config.js?v=9.3.0','/auth.css?v=9.3.0','/auth.js?v=9.3.0','/confirm-email.js?v=9.3.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
+const CACHE='temanchat-v95-call-push-reminders';
+const ASSETS=['/style.css?v=9.5.0','/v6.css?v=9.5.0','/share.js?v=9.5.0','/app.js?v=9.5.0','/storage.js?v=9.5.0','/config.js?v=9.5.0','/auth.css?v=9.5.0','/auth.js?v=9.5.0','/confirm-email.js?v=9.5.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
@@ -98,7 +98,7 @@ self.addEventListener('push',event=>{
    badge:'/icons/icon-192.png',tag:String(d.tag||'tc-event'),data:{url:safeUrl,kind:d.kind||'',callId:d.callId||''},renotify:true,
    // Jangan pakai silent:true bersama vibrate; kombinasi tersebut tidak valid.
    silent:notificationMode==='silent',
-   ...(['both','vibrate'].includes(notificationMode)?{vibrate:[180,90,180]}:{})
+   ...(['both','vibrate'].includes(notificationMode)?{vibrate:d.kind==='call'?[300,120,300,120,500,200,300]:[180,90,180]}:{})
   }));
   await Promise.allSettled(tasks);
  })());

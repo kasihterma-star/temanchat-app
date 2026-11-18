@@ -688,3 +688,91 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 /* Foto profil lebih ke bawah; tombol tidak boleh menutupinya pada layar pendek. */
 .call-remote{padding-top:clamp(20px,5vh,38px)}
 @media(max-height:580px){.call-remote{padding-top:8px}}
+
+
+/* V9.4 — lapisan tetap: tidak bergeser ketika status, foto atau video berubah.
+   Semua elemen panggilan dilapiskan dalam satu kontainer, bukan grid saling mendorong. */
+.call-dialog{
+  box-sizing:border-box!important;
+  width:min(700px,calc(100vw - 32px))!important;
+  height:min(610px,calc(100dvh - 40px))!important;
+  max-width:calc(100vw - 16px)!important;
+  max-height:calc(100dvh - 16px)!important;
+  padding:0!important;
+  margin:auto!important;
+  overflow:hidden!important;
+  border-radius:24px;
+}
+.call-dialog .call-screen{
+  position:relative!important;display:block!important;
+  box-sizing:border-box!important;isolation:isolate;
+  width:100%!important;height:100%!important;
+  min-height:0!important;max-height:100%!important;overflow:hidden!important;
+  padding:0!important;
+}
+.call-dialog .tc-call-top{
+  position:absolute!important;display:flex!important;
+  top:0!important;left:0!important;right:0!important;bottom:auto!important;
+  width:100%!important;min-height:0!important;
+  margin:0!important;padding:calc(18px + env(safe-area-inset-top,0px)) 16px 12px!important;
+  flex-direction:column;align-items:center;gap:7px;z-index:12;
+  background:linear-gradient(180deg,rgba(12,20,20,.92),rgba(12,20,20,.50) 75%,transparent);
+  pointer-events:none;
+}
+.call-dialog .tc-call-top .tc-call-status-pill,
+.call-dialog .tc-call-top .tc-call-mode-badge{flex:none;margin:0!important;line-height:1.25;max-width:100%;}
+.call-dialog .tc-call-top .tc-call-mode-hint{flex:none;max-width:min(420px,100%)!important;min-height:0;line-height:1.35;}
+.call-dialog .call-remote{
+  position:absolute!important;inset:0!important;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  width:100%!important;height:100%!important;max-height:none!important;
+  margin:0!important;padding:110px 16px 102px!important;
+  box-sizing:border-box;gap:9px;overflow:hidden;z-index:3;
+  pointer-events:none;
+}
+.call-dialog .call-avatar{width:clamp(72px,16vh,104px);height:clamp(72px,16vh,104px);max-width:25vw;max-height:25vw;flex:none;}
+.call-dialog #remoteVideo{
+  position:absolute!important;inset:0!important;
+  width:100%!important;height:100%!important;
+  transform:none!important;object-fit:contain;z-index:1;
+}
+.call-dialog #localVideo{
+  position:absolute!important;
+  left:auto!important;bottom:auto!important;
+  top:clamp(126px,26%,175px)!important;right:14px!important;
+  width:clamp(82px,19vw,118px)!important;
+  height:clamp(108px,22vh,152px)!important;
+  transform:none!important;object-fit:cover;z-index:8;
+}
+.call-dialog .call-controls{
+  position:absolute!important;bottom:0!important;top:auto!important;
+  left:0!important;right:0!important;
+  width:100%!important;max-width:100%!important;
+  display:flex!important;flex-wrap:wrap;justify-content:center;align-items:center;
+  box-sizing:border-box!important;margin:0!important;
+  padding:22px 12px calc(18px + env(safe-area-inset-bottom,0px))!important;
+  gap:9px;z-index:15;
+  background:linear-gradient(180deg,transparent,rgba(10,18,18,.88) 35%,rgba(10,18,18,.96));
+}
+.call-dialog .call-controls button{flex:0 0 auto;max-width:calc(50% - 5px);min-height:46px;}
+.call-dialog .call-controls button[hidden]{display:none!important;}
+@media(max-width:740px){
+ .call-dialog{
+   width:100vw!important;height:100dvh!important;max-width:100vw!important;
+   max-height:100dvh!important;border-radius:0!important;
+ }
+ .call-dialog .tc-call-top{padding-top:calc(15px + env(safe-area-inset-top,0px))!important;}
+ .call-dialog .call-remote{padding:120px 14px 110px!important;}
+ .call-dialog #localVideo{top:clamp(128px,23%,168px)!important;right:10px!important;width:88px!important;height:118px!important;}
+ .call-dialog .call-controls{padding-bottom:calc(15px + env(safe-area-inset-bottom,0px))!important;}
+ .call-dialog .call-controls button{font-size:12px;padding:10px 12px;}
+}
+@media(max-height:540px){
+ .call-dialog .tc-call-top{padding-top:calc(7px + env(safe-area-inset-top,0px))!important;gap:3px;}
+ .call-dialog .tc-call-top .tc-call-mode-hint{font-size:10px;}
+ .call-dialog .call-remote{padding:95px 12px 75px!important;}
+ .call-dialog .call-avatar{width:63px;height:63px;}
+ .call-dialog #localVideo{top:97px!important;width:65px!important;height:84px!important;}
+ .call-dialog .call-controls{padding-top:9px!important;padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))!important;}
+ .call-dialog .call-controls button{min-height:40px;padding:7px 9px;}
+}

@@ -1,0 +1,11 @@
+TemanChat V9.5 BETA — Pengingat Push Panggilan
+
+- Pesan biasa: satu push per pesan, perilaku lama.
+- Panggilan suara/video: maksimal empat push (0, 5, 10, 15 detik) dengan tag yang sama, sehingga notifikasi lama diperbarui, bukan menumpuk empat kartu.
+- Sebelum setiap pengingat server mengecek apakah panggilan masih berdering. Jika dijawab/ditolak/berakhir, pengiriman berhenti.
+- Notifikasi panggilan punya pola getar berbeda pada perangkat yang mendukung.
+- Tidak perlu migrasi D1 atau mengubah secret.
+
+PENTING: Push memerlukan izin notifikasi OS, langganan Push API yang valid, kunci VAPID yang benar, serta konfigurasi latar belakang perangkat. Chrome/Android/iOS dapat membatasi dan menggabungkan pemberitahuan. Pengulangan adalah best-effort, bukan pengganti perbaikan langganan push.
+
+UJI: Pengaturan > Notifikasi > Aktifkan > Kirim notifikasi uji. Lalu panggil dua perangkat dengan aplikasi penerima tertutup (namun PWA dan izin push aktif). Jika tes tidak datang, cek Cloudflare Observability/log server; jangan mengandalkan pengingat untuk mengatasi kegagalan push awal.

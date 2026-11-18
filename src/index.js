@@ -1,4 +1,4 @@
-import { pushApi, sendPush } from './push.js';
+import { pushApi, sendPush, sendRingingCallPushes } from './push.js';
 import { handleGoogle } from './google-drive.js';
 import { logDeviceLogin, touchDevice, listDevices, revokeDevice, ensureDeviceSchema } from './devices.js';
 // TemanChat V6 terpadu: login, chat, media R2 opsional, sinyal WebRTC.
@@ -611,7 +611,7 @@ export default {
     }
     if(path.startsWith('/api/media/')||path.startsWith('/api/calls/')) {
       const me=await userSession(request,env);
-      const extra=await handleExtra(request,env,me,{readJSON,limit,allowOrigin,sendPush:(user,payload,ttl)=>ctx?.waitUntil(sendPush(env,user,payload,ttl))});
+      const extra=await handleExtra(request,env,me,{readJSON,limit,allowOrigin,sendPush:(user,payload,ttl)=>ctx?.waitUntil(sendPush(env,user,payload,ttl)),sendCallAlerts:(user,payload)=>ctx?.waitUntil(sendRingingCallPushes(env,user,payload))});
       if(extra)return extra;
     }
     if(path.startsWith('/api/'))return reply({error:'Endpoint tidak ditemukan'},404);

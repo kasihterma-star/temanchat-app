@@ -169,3 +169,21 @@ export async function sendPush(env,userId,payload,ttl=120){
 
 // Internal helpers exposed only for local cryptographic tests (not HTTP).
 export const _pushCryptoTest={encryptedPayload,vapidJwt,from64,b64url};
+
+// Hanya panggilan yang masih berdering mendapat pengingat, maks. 4 push/15 detik.
+// ctx.waitUntil mempertahankan tugas ini setelah HTTP response selesai (best effort,
+// bukan garansi alarm background atau notifikasi yang diizinkan sistem operasi).
+export async function sendRingingCallPushes(env,calleeId,payload){
+ const callId=String(payload?.callId||'');
+ if(!/^[0-9a-f-]{36}$/i.test(callId)||!calleeId)return;
+ for(let attempt=0;attempt<4;attempt++){
+  if(attempt)await new Promise(resolve=>setTimeout(resolve,5000));
+  try{
+   const row=await env.DB.prepare("SELECT id FROM tc_call_sessions WHERE id=? AND callee_id=? AND status='ringing' AND created_at>datetime('now','-30 seconds')")
+    .bind(callId,calleeId).first();
+   if(!row)break;
+   // Same tag replaces notification; renotify causes a fresh signal where OS allows.
+   await sendPush(env,calleeId,{...payload,kind:'call',tag:'tc-call-'+callId,reminder:attempt+1},35);
+  }catch(e){console.warn('Call reminder failed',e?.message);break}
+ }
+}

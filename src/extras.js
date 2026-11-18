@@ -417,7 +417,9 @@ export async function handleExtra(request, env, me, deps){
   await env.DB.prepare('INSERT INTO tc_call_sessions(id,chat_id,caller_id,callee_id,kind) VALUES(?,?,?,?,?)').bind(id,chat.id,me.id,callee,kind).run();
   await env.DB.prepare('INSERT INTO tc_call_modes(call_id,mode) VALUES(?,?)').bind(id,mode).run();
   if(strategy==='auto')await env.DB.prepare('INSERT INTO tc_call_auto_strategies(call_id) VALUES(?)').bind(id).run();
-  deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id},45);
+  const callAlert={title:kind==='video'?'📹 Panggilan video TemanChat':'📞 Panggilan suara TemanChat',body:me.display_name+' sedang menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id};
+  if(deps.sendCallAlerts)deps.sendCallAlerts(callee,callAlert);
+  else deps.sendPush?.(callee,callAlert,45);
   return res({ok:true,callId:id});
  }
  if(p==='/api/calls/incoming'&&request.method==='GET'){
