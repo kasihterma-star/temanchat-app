@@ -5,10 +5,10 @@ const home=r('public/index.html'),auth=r('public/auth.html'),app=r('public/app.j
 assert.match(home,/id="shareAppBtn"/);
 assert.match(auth,/id="shareAuthBtn"/);
 assert.match(home,/<img src="\/icons\/temanchat-logo\.png" alt=""><\/div>/);
-assert.match(home,/\/share\.js\?v=9\.1\.1/);
-assert.match(auth,/\/share\.js\?v=9\.1\.1/);
-assert.match(sw,/temanchat-v91-1-call-mode-display/);
-assert.match(sw,/\/share\.js\?v=9\.1\.1/);
+assert.match(home,/\/share\.js\?v=9\.2\.0/);
+assert.match(auth,/\/share\.js\?v=9\.2\.0/);
+assert.match(sw,/temanchat-v92-call-mode-flow/);
+assert.match(sw,/\/share\.js\?v=9\.2\.0/);
 assert.match(share,/navigator\.share/);
 assert.match(share,/wa\.me\//);
 assert.match(share,/t\.me\/share\/url/);

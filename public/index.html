@@ -9,12 +9,12 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/style.css?v=9.1.1">
-  <link rel="stylesheet" href="/v6.css?v=9.1.1">
-  <script src="/config.js?v=9.1.1" defer></script>
-  <script src="/storage.js?v=9.1.1" defer></script>
-  <script src="/share.js?v=9.1.1" defer></script>
-  <script src="/app.js?v=9.1.1" defer></script>
+  <link rel="stylesheet" href="/style.css?v=9.2.0">
+  <link rel="stylesheet" href="/v6.css?v=9.2.0">
+  <script src="/config.js?v=9.2.0" defer></script>
+  <script src="/storage.js?v=9.2.0" defer></script>
+  <script src="/share.js?v=9.2.0" defer></script>
+  <script src="/app.js?v=9.2.0" defer></script>
 </head>
 <body>
 <div id="app">
@@ -29,6 +29,7 @@
         <button type="button" data-tc-theme="system" title="Ikuti tema perangkat" aria-pressed="false"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><span>Sistem</span></button>
       </div>
     </div>
+    <button type="button" class="tc-call-mode-shortcut" id="callModeMenuBtn" title="Pilih mode panggilan dan cek izin jarak jauh">☎ Mode panggilan · Atur izin</button>
     <div class="sidebar-title"><h2>Pesan</h2><button class="tc-admin-entry" id="adminPanelBtn" type="button" hidden aria-label="Buka panel admin" title="Kelola izin panggilan">◆ Admin</button><button class="round" id="callHistoryBtn" title="Riwayat panggilan" aria-label="Riwayat panggilan"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.79 19.79 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.13 1 .37 2 .7 2.95a2 2 0 0 1-.45 2.1L8.1 10a16 16 0 0 0 5.9 5.9l1.24-1.24a2 2 0 0 1 2.1-.45 13 13 0 0 0 2.95.7A2 2 0 0 1 22 16.9Z"/></svg></button><button class="round tc-share-trigger" id="shareAppBtn" type="button" title="Bagikan TemanChat" aria-label="Bagikan aplikasi TemanChat"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.6 6.6-4.1m-6.6 8 6.6 4"/></svg></button><button class="round" id="installBtn" title="Instal TemanChat" aria-label="Instal aplikasi"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 20h14"/></svg></button></div>
     <label class="search"><span><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span><input id="search" placeholder="Cari teman lewat username…" autocomplete="off" aria-label="Cari teman"></label>
     <div id="contacts" class="contacts"><p class="tc-empty">Memuat percakapan…</p></div>
@@ -111,9 +112,11 @@
 <dialog id="modal"><div class="modal-head"><div class="logo-large"><img src="/icons/temanchat-logo.png" alt="Logo TemanChat"></div><button class="round" id="closeModal" aria-label="Tutup"><svg class="tc-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div><h2 id="modalTitle">TemanChat</h2><p id="modalDesc"></p><div id="modalContent"></div></dialog>
 <dialog id="callDialog" class="call-dialog">
   <div class="call-screen">
-    <div class="tc-call-status-pill" id="callStatusPill" role="timer" aria-live="off">Memanggil…</div>
-    <div id="callModeBadge" class="tc-call-mode-badge" role="status" aria-live="polite">Mode panggilan: Memeriksa…</div>
-    <small id="callModeHint" class="tc-call-mode-hint">Mode lokal: hanya jaringan LAN / Wi-Fi yang saling terhubung</small>
+    <div class="tc-call-top" aria-label="Status dan mode panggilan">
+      <div class="tc-call-status-pill" id="callStatusPill" role="timer" aria-live="off">Memanggil…</div>
+      <div id="callModeBadge" class="tc-call-mode-badge" role="status" aria-live="polite">Memeriksa mode…</div>
+      <small id="callModeHint" class="tc-call-mode-hint">Memuat konfigurasi panggilan…</small>
+    </div>
     <div class="call-remote" id="callRemote"><div class="call-avatar" id="callAvatar">T</div><strong id="callName">Memanggil…</strong><small id="callState">Menghubungkan…</small></div>
     <video id="remoteVideo" autoplay playsinline></video>
     <audio id="remoteAudio" autoplay playsinline></audio>

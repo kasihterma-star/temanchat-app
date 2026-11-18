@@ -1372,15 +1372,17 @@ async function showCallPath(c){
   const local=pair&&stats.get(pair.localCandidateId);
   const remote=pair&&stats.get(pair.remoteCandidateId);
   if(c.mode==='remote'){
+   if(!pair){setCallModeDisplay('remote','Terhubung · jalur koneksi belum dapat dideteksi');return;}
    const relay=local?.candidateType==='relay'||remote?.candidateType==='relay';
-   setCallModeDisplay('remote',relay?'Tersambung melalui relay TURN':'Tersambung langsung (tanpa relay TURN)');
-  }else if(c.mode==='local')setCallModeDisplay('local','Tersambung melalui jaringan lokal');
+   const known=!!(local?.candidateType&&remote?.candidateType);
+   setCallModeDisplay('remote',!known?'Terhubung · jalur koneksi tidak tersedia':relay?'Terhubung via relay TURN':'Terhubung langsung (tanpa relay TURN)');
+  }else if(c.mode==='local')setCallModeDisplay('local','Terhubung melalui jaringan lokal');
  }catch{/* Diagnostik bukan syarat agar panggilan berfungsi. */}
 }
 function showCallUI(kind,name,incoming,username){
  const dlg=$('callDialog');$('callName').textContent=name||'TemanChat';paintAvatar($('callAvatar'),name,username);
  $('callRemote').style.display='flex';$('callAvatar').style.display='grid';$('remoteVideo').style.display='none';$('localVideo').style.display='none';
- setCallModeDisplay(incoming?'pending':(currentCall?.mode||'pending'));
+ setCallModeDisplay(currentCall?.mode||'pending');
  $('acceptCall').hidden=!incoming;$('cameraCall').hidden=kind!=='video';callLabel(incoming?'Panggilan masuk…':'Memanggil…');
  if(!dlg.open)dlg.showModal();
  if(!currentCall?.isCaller)vibrateForCall();
@@ -1417,7 +1419,7 @@ $('cameraCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const 
 async function preparePeer(c){
  const opts=await api('/api/calls/config?callId='+encodeURIComponent(c.id));
  c.mode=opts.mode==='remote'?'remote':'local';
- if(currentCall===c)setCallModeDisplay(c.mode,c.mode==='remote'?(opts.turnConfigured?'TURN tersedia; memeriksa jalur koneksi…':'TURN belum tersedia; mencoba STUN langsung'):'Hanya LAN / Wi-Fi yang saling terhubung');
+ if(currentCall===c)setCallModeDisplay(c.mode,c.mode==='remote'?(opts.turnConfigured?'Relay TURN siap; memeriksa sambungan…':'TURN tidak siap; mencoba koneksi STUN langsung'):'Hanya LAN / Wi-Fi yang saling terhubung');
  if(opts.mode==='remote'&&!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'Mode jarak jauh sedang mencoba STUN langsung. Jika gagal, perlu TURN.');
  const constraints=c.kind==='audio'
   ? {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}
@@ -1496,14 +1498,15 @@ async function pollCall(){
  }catch(e){console.warn('Call polling',e.message)}
  finally{c.pollBusy=false}
 }
-async function startCall(kind){
+async function startCall(kind,selectedMode='local'){
  try{if(tcAudioContext?.state==='suspended')await tcAudioContext.resume()}catch{}
  if(!active)return toast('Pilih teman terlebih dahulu.');
  if(currentCall)return toast('Masih ada panggilan aktif.');
  if(!Number(active.call_unlocked||0))return toast('Saling bertukar pesan terlebih dahulu untuk memulai panggilan suara atau video.');
  if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)return toast('Browser ini belum mendukung WebRTC atau izin mikrofon/kamera.');
  try{
-  const mode=remoteCallGranted&&localStorage.getItem(CALL_MODE_KEY)==='remote'?'remote':'local';
+  // Server tetap memvalidasi hak pemanggil; tidak bergantung pada status cache browser.
+  const mode=selectedMode==='remote'?'remote':'local';
   const d=await post('/api/calls/start',{conversationId:active.id,kind,mode});
   const c={id:d.callId,kind,mode,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
   // Batasi panggilan tidak terjawab ~30 detik tanpa menunggu cron 1 menit.
@@ -1521,7 +1524,65 @@ async function startCall(kind){
   toast('Panggilan dikirim. Penerima bisa menerima notifikasi push.');
  }catch(e){toast('Panggilan gagal: '+e.message);await hangup()}
 }
-$('voiceBtn').onclick=()=>startCall('audio');$('videoBtn').onclick=()=>startCall('video');
+// V9.2: semua akun (termasuk pengguna biasa) memilih mode SEBELUM menelepon.
+async function openCallSetup(kind){
+ if(currentCall)return toast('Masih ada panggilan aktif.');
+ if(kind){
+  if(!active)return toast('Pilih teman terlebih dahulu.');
+  if(!Number(active.call_unlocked||0))return toast('Saling bertukar pesan terlebih dahulu untuk memulai panggilan.');
+  if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)return toast('Browser belum mendukung panggilan WebRTC.');
+ }
+ if($('modal').open)$('modal').close();
+ modal(kind==='audio'?'Panggilan suara':kind==='video'?'Panggilan video':'Mode panggilan',
+  kind?'Pilih mode panggilan ke '+active.other_name+'.':'Atur mode untuk panggilan keluar dan ajukan izin jika diperlukan.');
+ const root=$('modalContent'),wrap=element('div','tc-call-setup');
+ const choice=element('div','tc-call-setup-choice');
+ choice.append(element('strong','','Mode panggilan'));
+ const select=element('select');select.setAttribute('aria-label','Pilih mode panggilan');
+ for(const [value,label] of [['local','Lokal — satu jaringan LAN / Wi-Fi'],['remote','Jarak jauh — antarjaringan/internet']]){
+  const option=element('option','',label);option.value=value;select.append(option);
+ }
+ const stateText=element('div','tc-call-setup-state','Memeriksa izin panggilan jarak jauh…');
+ const request=element('button','primary','Ajukan izin jarak jauh');request.type='button';request.hidden=true;
+ const refresh=element('button','tc-admin-refresh','Perbarui status izin');refresh.type='button';
+ const actions=element('div','tc-call-setup-actions');
+ const cancel=element('button','tc-admin-refresh','Batal');cancel.type='button';cancel.onclick=()=>{$('modal').close()};
+ const go=element('button','primary tc-call-start',kind==='audio'?'Mulai telepon suara':'Mulai panggilan video');go.type='button';
+ choice.append(select);actions.append(refresh,request);
+ go.hidden=!kind;
+ wrap.append(choice,stateText,actions,go,cancel);root.replaceChildren(wrap);
+ let loaded=false, approved=false;
+ async function loadAccess(){
+  refresh.disabled=true;go.disabled=true;stateText.textContent='Memeriksa status izin…';
+  try{
+   const d=await api('/api/calls/access');approved=!!d.approved;remoteCallGranted=approved;loaded=true;
+   select.querySelector('option[value="remote"]').disabled=!approved;
+   if(!approved){select.value='local';localStorage.setItem(CALL_MODE_KEY,'local');}
+   else select.value=localStorage.getItem(CALL_MODE_KEY)==='remote'?'remote':'local';
+   $('callModeMenuBtn').textContent='☎ Mode panggilan · '+(approved&&select.value==='remote'?'Jarak Jauh':'Lokal')+' (Atur)';
+   if(d.admin)stateText.textContent='Akun admin: mode jarak jauh diizinkan.';
+   else if(approved)stateText.textContent='Izin jarak jauh disetujui'+(d.expiresAt?' sampai '+d.expiresAt+' UTC':'')+'. Kamu bisa memilih Jarak Jauh.';
+   else if(!d.adminConfigured)stateText.textContent='Admin izin panggilan belum dikonfigurasi. Hanya Mode Lokal tersedia.';
+   else if(d.state==='pending')stateText.textContent='Menunggu persetujuan admin. Selama menunggu, kamu bisa menelepon Mode Lokal.';
+   else if(d.state==='rejected')stateText.textContent='Pengajuan ditolak atau izin dicabut. Kamu boleh mengajukan lagi.';
+   else if(d.state==='expired')stateText.textContent='Izin kedaluwarsa. Silakan ajukan kembali.';
+   else stateText.textContent='Mode Lokal aktif. Ajukan izin admin untuk memakai Mode Jarak Jauh.';
+   request.hidden=approved||d.state==='pending'||!d.adminConfigured;
+  }catch(e){approved=false;remoteCallGranted=false;loaded=false;select.value='local';select.querySelector('option[value="remote"]').disabled=true;request.hidden=true;stateText.textContent='Tidak bisa memeriksa izin: '+e.message+'. Coba perbarui.';}
+  finally{refresh.disabled=false;go.disabled=!loaded;}
+ }
+ select.onchange=()=>{if(select.value==='remote'&&!approved){select.value='local';return toast('Tunggu persetujuan admin.')}localStorage.setItem(CALL_MODE_KEY,select.value);$('callModeMenuBtn').textContent='☎ Mode panggilan · '+(select.value==='remote'?'Jarak Jauh':'Lokal')+' (Atur)';};
+ request.onclick=async()=>{request.disabled=true;try{await post('/api/calls/access/request',{});toast('Pengajuan dikirim kepada admin.');await loadAccess();}catch(e){toast(e.message)}finally{request.disabled=false}};
+ refresh.onclick=loadAccess;
+ go.onclick=async()=>{
+  if(!loaded||select.value==='remote'&&!approved)return toast('Perbarui izin terlebih dahulu.');
+  const mode=select.value;localStorage.setItem(CALL_MODE_KEY,mode);go.disabled=true;
+  $('modal').close();await startCall(kind,mode);
+ };
+ await loadAccess();
+}
+$('callModeMenuBtn').onclick=()=>void openCallSetup(null);
+$('voiceBtn').onclick=()=>void openCallSetup('audio');$('videoBtn').onclick=()=>void openCallSetup('video');
 $('acceptCall').onclick=async()=>{
  const c=currentCall;if(!c||c.isCaller||callBusy)return;callBusy=true;
  $('acceptCall').hidden=true;callLabel('Menyiapkan kamera/mikrofon…');
@@ -1531,7 +1592,7 @@ $('acceptCall').onclick=async()=>{
 };
 async function checkIncoming(){
  if(checkingCalls||currentCall||document.hidden||!me)return;checkingCalls=true;
- try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};startVoiceSignalTimer(currentCall);showCallUI(d.call.kind,d.call.caller_name,true,d.call.caller_username);(notificationsEnabled()&&!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
+ try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,mode:d.call.mode==='remote'?'remote':'local',isCaller:false,lastSignal:0,pending:[],hasRemote:false};startVoiceSignalTimer(currentCall);showCallUI(d.call.kind,d.call.caller_name,true,d.call.caller_username);(notificationsEnabled()&&!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
  catch(e){console.warn('Incoming call',e.message)}finally{checkingCalls=false}
 }
 let lastKnownCallId=null,callHistoryReady=false,lastHistoryCheck=0;
@@ -1580,7 +1641,7 @@ async function init(){
   if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.1'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.2'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

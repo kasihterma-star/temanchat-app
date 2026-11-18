@@ -1,0 +1,36 @@
+TemanChat V9.2 BETA — Perbaikan Mode Panggilan (18 November 2026)
+
+DASAR: TemanChat V9.1.1, seluruh fitur chat/izin/admin tetap dipertahankan.
+
+PERBAIKAN
+1. Label status Berdering/Menghubungkan/durasi berada terpisah di atas label Mode Lokal/Jarak Jauh dan petunjuk koneksi.
+2. Tombol "☎ Mode panggilan · Atur izin" tampil pada sidebar akun biasa dan admin; menekan telepon/video juga menampilkan modal pemilihan mode sebelum panggilan dikirim.
+3. Pengguna biasa dapat mengajukan izin, memeriksa status Pending / Ditolak / Disetujui / Kedaluwarsa, dan memilih Jarak Jauh setelah disetujui admin.
+4. Izin diambil ulang dari server setiap kali membuka menu panggilan. Admin tetap wajib menyetujui pemanggil untuk mode jauh; penerima tidak perlu izin untuk menjawab.
+5. Layar penerima langsung menunjukkan mode dari server, bukan hanya tulisan menunggu.
+6. Kredensial TURN sementara diambil dari Cloudflare Realtime oleh Worker, divalidasi dan status ditampilkan lebih jelas. Jika TURN belum aktif/gagal, STUN langsung dicoba, TIDAK ada jaminan berhasil antarjaringan.
+7. PWA cache dinaikkan ke temanchat-v92-call-mode-flow, nomor tampilan V9.2.
+
+INSTAL
+- Backup repository GitHub, lalu unggah isi folder temanchat-app-main tanpa menghapus data D1.
+- Commit/push; periksa deployment Ready di Cloudflare.
+- Buka domain resmi https://chat.ege.my.id dan refresh halaman.
+- Uji menggunakan dua perangkat: Lokal pada LAN yang saling bisa berkomunikasi; Jarak Jauh pada Wi-Fi vs data seluler, setelah izin admin.
+- Secrets Worker yang harus sudah tersedia: TC_CALL_ADMIN_EMAIL, CF_TURN_KEY_ID, CF_TURN_API_TOKEN.
+- Jangan memasukkan Secret ke kode/ZIP. Uji jalur TURN dengan data statistik WebRTC pada panggilan yang tersambung.
+- Belum dilakukan uji panggilan nyata pada jaringan pengguna; hasilnya bergantung provider & konfigurasi secret.
+
+ALUR UJI AKUN BIASA
+1. Masuk TemanChat; klik tombol "Mode panggilan · Atur izin" di sidebar.
+2. Jika tidak berizin, klik "Ajukan izin jarak jauh".
+3. Admin login, buka ◆ Admin, temukan pengguna, pilih masa berlaku izin, lalu "Beri izin".
+4. Pengguna biasa kembali ke menu "Mode panggilan", klik "Perbarui status izin"; status menjadi disetujui. Pilih "Jarak jauh".
+5. Pilih teman, tekan Telepon/Video, periksa mode, lalu "Mulai".
+6. Penerima bisa menjawab tanpa izin khusus; pada layar penerima mode mengikuti pemanggil.
+
+DIAGNOSTIK TURN
+- "Relay TURN siap" = konfigurasi sementara telah diperoleh dari Cloudflare (bukan jaminan koneksi berhasil).
+- "TURN tidak siap" = aplikasi hanya mencoba STUN langsung; cek secret di Workers > Settings > Variables and Secrets.
+- "Terhubung via relay TURN" = statistik WebRTC menunjukkan candidate relay.
+- "Terhubung langsung" = statistik yang tersedia menunjukkan tidak memakai relay.
+- Jangan pernah mengunggah token/secret atau menempelkannya di chat.

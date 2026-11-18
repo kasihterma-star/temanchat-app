@@ -571,3 +571,41 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
 .tc-call-mode-badge{display:table;margin:10px auto 1px;padding:7px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.13);color:#fff;font-size:13px;font-weight:800;letter-spacing:.01em;text-align:center;position:relative;z-index:2}
 .tc-call-mode-badge[data-mode="remote"]{background:rgba(32,145,225,.24);border-color:rgba(125,204,255,.65)}
 .tc-call-mode-badge[data-mode="local"]{background:rgba(38,166,106,.22);border-color:rgba(142,239,190,.6)}
+
+/* V9.2: header panggilan tersusun vertikal; tidak saling menutupi. */
+.tc-call-top{position:absolute;top:16px;left:16px;right:16px;z-index:7;display:flex;
+ flex-direction:column;align-items:center;justify-content:flex-start;gap:7px;pointer-events:none}
+.tc-call-top .tc-call-status-pill{position:static;left:auto;top:auto;transform:none;max-width:min(94%,380px);
+ margin:0;padding:8px 15px;min-height:34px;display:flex;align-items:center;justify-content:center;
+ box-sizing:border-box;text-align:center;line-height:1.2}
+.tc-call-top .tc-call-mode-badge{position:static;display:inline-flex;justify-content:center;align-items:center;
+ margin:0;max-width:min(94%,380px);min-height:32px;padding:6px 15px;box-sizing:border-box;
+ line-height:1.3;white-space:normal}
+.tc-call-top .tc-call-mode-hint{font-size:11px;max-width:min(94%,390px);margin:0;padding:0;
+ line-height:1.3;overflow-wrap:anywhere;opacity:.88;color:#e4edeb}
+/* Kamera lokal tidak menyembunyikan status dan mode panggilan. */
+#localVideo{top:134px;right:12px;max-height:calc(100% - 236px)}
+@media(max-width:740px){
+ .tc-call-top{top:calc(16px + env(safe-area-inset-top));gap:7px}
+ .tc-call-top .tc-call-status-pill{max-width:95%;font-size:12px}
+ .tc-call-top .tc-call-mode-badge{font-size:12px}
+ .tc-call-top .tc-call-mode-hint{font-size:11px}
+ #localVideo{top:calc(137px + env(safe-area-inset-top));width:98px;height:127px;right:10px}
+ .call-controls{margin-bottom:max(env(safe-area-inset-bottom),6px)}
+}
+/* Menu mode untuk semua pengguna ketika menekan telepon/video. */
+.tc-call-setup{display:grid;gap:12px}
+.tc-call-setup-choice{display:grid;gap:6px;border:1px solid var(--line-soft);
+ padding:12px;border-radius:13px;background:var(--control);color:var(--text)}
+.tc-call-setup-choice strong{font-size:13px}
+.tc-call-setup-choice select{width:100%;min-height:44px}
+.tc-call-setup-state{font-size:13px;line-height:1.5;padding:10px 12px;
+ border-radius:10px;background:var(--accent-soft);color:var(--text);overflow-wrap:anywhere}
+.tc-call-setup-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tc-call-setup-actions button{min-height:44px}
+.tc-call-setup .tc-call-start{width:100%;min-height:46px}
+
+.tc-call-mode-shortcut{display:block;width:calc(100% - 38px);margin:0 19px 12px;padding:10px 13px;
+ border:1px solid var(--line-soft);border-radius:12px;background:var(--control);color:var(--strong);
+ text-align:left;font-size:12px;font-weight:750;min-height:40px;cursor:pointer}
+.tc-call-mode-shortcut:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

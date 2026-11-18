@@ -358,7 +358,7 @@ export async function handleExtra(request, env, me, deps){
   // Cloudflare Realtime TURN: secret jangka panjang hanya ada di Worker.
   // Browser menerima kredensial sementara untuk satu sesi panggilan.
   if(!env.CF_TURN_KEY_ID||!env.CF_TURN_API_TOKEN)
-    return res({ok:true,iceServers:fallback,turnConfigured:false,turnWarning:'TURN belum diaktifkan. Panggilan pada jaringan berbeda mungkin gagal.'});
+    return res({ok:true,mode:'remote',iceServers:fallback,turnConfigured:false,turnStatus:'not_configured',turnWarning:'Cloudflare TURN belum aktif. Panggilan akan mencoba koneksi langsung menggunakan STUN.'});
   try{
     if(!/^[a-zA-Z0-9_-]{8,128}$/.test(env.CF_TURN_KEY_ID))throw Error('TURN key ID tidak valid');
     const response=await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(env.CF_TURN_KEY_ID)}/credentials/generate-ice-servers`,{
@@ -368,15 +368,24 @@ export async function handleExtra(request, env, me, deps){
     if(!response.ok)throw Error('TURN provider HTTP '+response.status);
     const data=await response.json();
     // Jangan terima URL lain dari response yang tidak sesuai dengan TURN Cloudflare.
-    const iceServers=Array.isArray(data.iceServers)?data.iceServers.filter(x=>x&&Array.isArray(x.urls)).map(x=>({
-      urls:x.urls.filter(u=>typeof u==='string'&&/^(stun:stun\.cloudflare\.com:3478|turns?:turn\.cloudflare\.com:(?:3478|443|80|5349)(?:\?transport=(?:tcp|udp))?)$/.test(u)),
-      ...(typeof x.username==='string'&&typeof x.credential==='string'?{username:x.username,credential:x.credential}:{})
-    })).filter(x=>x.urls.length):[];
+    // Izinkan hanya alamat resmi Cloudflare; jangan meneruskan URL tak dikenal.
+    const allowed=/^(?:stun:stun\.cloudflare\.com:3478|turn:turn\.cloudflare\.com:(?:3478|443|80)(?:\?transport=(?:tcp|udp))?|turns:turn\.cloudflare\.com:(?:5349|443)(?:\?transport=tcp)?)$/;
+    const iceServers=Array.isArray(data.iceServers)?data.iceServers.map(x=>{
+      if(!x||typeof x!=='object')return null;
+      const candidates=Array.isArray(x.urls)?x.urls:typeof x.urls==='string'?[x.urls]:[];
+      const urls=candidates.filter(u=>typeof u==='string'&&allowed.test(u));
+      if(!urls.length)return null;
+      if(urls.some(u=>u.startsWith('turn'))){
+        if(typeof x.username!=='string'||!x.username||typeof x.credential!=='string'||!x.credential)return null;
+        return {urls,username:x.username,credential:x.credential};
+      }
+      return {urls};
+    }).filter(Boolean):[];
     if(!iceServers.some(x=>x.username&&x.credential&&x.urls.some(u=>u.startsWith('turn'))))throw Error('Provider tidak mengembalikan kredensial TURN');
-    return res({ok:true,iceServers,turnConfigured:true});
+    return res({ok:true,mode:'remote',iceServers,turnConfigured:true,turnStatus:'ready'});
   }catch(error){
     console.warn('TURN setup',error?.message||'unknown');
-    return res({ok:true,iceServers:fallback,turnConfigured:false,turnWarning:'Server relay TURN sementara tidak tersedia. Coba kembali atau periksa Secret TURN.'});
+    return res({ok:true,mode:'remote',iceServers:fallback,turnConfigured:false,turnStatus:'unavailable',turnWarning:'Relay TURN belum dapat dihubungi. Periksa CF_TURN_KEY_ID dan CF_TURN_API_TOKEN di Cloudflare; saat ini mencoba STUN langsung.'});
   }
  }
  if(p==='/api/calls/start'&&request.method==='POST'){
@@ -403,8 +412,8 @@ export async function handleExtra(request, env, me, deps){
   return res({ok:true,callId:id});
  }
  if(p==='/api/calls/incoming'&&request.method==='GET'){
-  const r=await env.DB.prepare(`SELECT c.id,c.chat_id,c.kind,u.display_name AS caller_name,u.username AS caller_username
-    FROM tc_call_sessions c JOIN users u ON u.id=c.caller_id
+  const r=await env.DB.prepare(`SELECT c.id,c.chat_id,c.kind,COALESCE(m.mode,'local') AS mode,u.display_name AS caller_name,u.username AS caller_username
+    FROM tc_call_sessions c JOIN users u ON u.id=c.caller_id LEFT JOIN tc_call_modes m ON m.call_id=c.id
     WHERE c.callee_id=? AND c.status='ringing' AND c.created_at>datetime('now','-30 seconds')
     ORDER BY c.created_at DESC LIMIT 1`).bind(me.id).first();
   if(r){
