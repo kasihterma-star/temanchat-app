@@ -1,0 +1,13 @@
+TemanChat V9.6 BETA — Panggilan Cepat, Navigasi Bawah, Instal iPhone
+
+1. Tombol telepon/video langsung memulai panggilan tanpa menu pemilihan mode.
+2. Preferensi jaringan ada di Pengaturan > Mode Panggilan dan akses admin.
+3. Otomatis menggunakan jalur remote/TURN yang pada uji pengguna berhasil. Jika izin belum disetujui, gunakan Lokal.
+4. Tiga tombol navigasi: Chat, Panggilan (riwayat), Pengaturan.
+5. Tombol refresh ↻ pada daftar pesan; juga tombol muat ulang aplikasi di Pengaturan dan Tentang.
+6. Tentang menampilkan informasi pengingat push panggilan dan panduan pemasangan iPhone.
+7. Panggilan video menggunakan echoCancellation/noiseSuppression/autoGainControl ketika browser mendukung.
+8. Tidak ada cara web standar untuk menampilkan instalasi otomatis di Safari iPhone; gunakan Bagikan > Tambahkan ke Layar Utama.
+
+PENTING: Tidak ada perubahan tabel D1, token atau rahasia TURN; fungsi panggilan dan push tetap perlu diuji pada HP nyata.
+Jika suara berdengung, uji memakai earphone dan jauhkan dua perangkat agar tidak terjadi acoustic feedback.

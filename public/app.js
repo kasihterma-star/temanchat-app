@@ -941,6 +941,16 @@ $('settingsBtn').onclick=()=>{
  modal('Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
  if(me?.is_admin)$('modalDesc').append(' ',officialBadge());
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
+ const aboutBtn=element('button','tc-media-action tc-about-entry','ⓘ Tentang TemanChat · Versi 9.6');
+ aboutBtn.type='button';aboutBtn.onclick=()=>{
+  modal('Tentang TemanChat V9.6','PWA TemanChat untuk pesan, panggilan suara, dan video.');
+  const c=$('modalContent');
+  c.append(element('p','tc-about-paragraph','Panggilan masuk memakai Web Push dan dapat mengirim maksimal empat pengingat selama belum dijawab. Notifikasi bisa dipengaruhi pengaturan izin, baterai, atau kebijakan perangkat.'));
+  c.append(element('p','tc-about-paragraph','Mode Otomatis saat akses disetujui memakai relay TURN seperti Mode Jarak Jauh. Mode Lokal tetap bisa dipilih manual dari Pengaturan.'));
+  c.append(element('p','tc-about-paragraph','iPhone: buka melalui Safari → Bagikan → Tambahkan ke Layar Utama. Browser iPhone tidak menyediakan popup instalasi otomatis seperti Android.'));
+  const refresh=element('button','primary','↻ Muat ulang aplikasi');refresh.type='button';refresh.onclick=()=>location.reload();c.append(refresh);
+ };wrap.append(aboutBtn);
+ const refreshSettings=element('button','tc-media-action','↻ Perbarui aplikasi');refreshSettings.type='button';refreshSettings.onclick=()=>location.reload();wrap.append(refreshSettings);
  const shareSettings=element('button','primary','↗ Bagikan TemanChat');shareSettings.type='button';shareSettings.onclick=()=>{ $('modal').close(); window.TCShare?.open(); };wrap.append(shareSettings);
  // Nama tampilan dapat diganti, username login tidak berubah.
  const profileTitle=element('label','','Nama panggilan saya');
@@ -1310,7 +1320,7 @@ async function triggerTemanChatInstall(){
  }
  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent);
  modal('Pasang TemanChat',ios
-  ? 'Buka di Safari, ketuk Bagikan, kemudian Tambahkan ke Layar Utama. Setelah terpasang, buka TemanChat lewat ikonnya.'
+  ? 'Di iPhone, popup instalasi otomatis seperti Android tidak tersedia. Buka TemanChat di Safari → tombol Bagikan (kotak dengan panah ke atas) → Tambahkan ke Layar Utama → Tambah. Sesudah itu buka dari ikon TemanChat, bukan tab Safari.'
   : 'Di browser, buka menu ⋮ lalu pilih Instal aplikasi atau Tambahkan ke layar utama. Jika menu tidak ada, browser mungkin belum mendukung instalasi.');
 }
 $('installBtn').onclick=triggerTemanChatInstall;
@@ -1450,7 +1460,7 @@ async function preparePeer(c){
  if(opts.mode==='remote'&&!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'TURN belum tersedia; mencoba sambungan langsung STUN.');
  const constraints=c.kind==='audio'
   ? {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}
-  : {audio:true,video:true};
+  : {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:true};
  const stream=await navigator.mediaDevices.getUserMedia(constraints);
  if(currentCall!==c){stream.getTracks().forEach(t=>t.stop());return}
  // V9.4: Mode Otomatis menggunakan relay TURN ketika siap, termasuk saat satu Wi-Fi.
@@ -1637,7 +1647,26 @@ async function openCallSetup(kind){
  await loadAccess();
 }
 $('callModeMenuBtn').onclick=()=>void openCallSetup(null);
-$('voiceBtn').onclick=()=>void openCallSetup('audio');$('videoBtn').onclick=()=>void openCallSetup('video');
+// V9.6: sekali ketuk langsung menelepon. Mode diatur terpisah di Pengaturan.
+let quickCallBusy=false;
+async function quickCall(kind){
+ if(quickCallBusy||currentCall)return toast('Ada panggilan yang sedang diproses.');
+ if(!active)return toast('Pilih teman terlebih dahulu.');
+ if(!Number(active.call_unlocked||0))return toast('Saling bertukar pesan dahulu untuk memulai panggilan.');
+ quickCallBusy=true;
+ try{
+  const access=await api('/api/calls/access');
+  remoteCallGranted=!!access.approved;
+  const chosen=preferredCallMode(remoteCallGranted);
+  // Jalur yang telah berhasil diuji: AUTO menggunakan jalur REMOTE/TURN;
+  // tetap menampilkan preferensi AUTO dalam menu, tanpa popup sebelum panggilan.
+  const reliable=chosen==='auto'?'remote':chosen;
+  await startCall(kind,reliable);
+ }catch(e){toast('Gagal memeriksa izin: '+e.message)}
+ finally{quickCallBusy=false}
+}
+$('voiceBtn').onclick=()=>void quickCall('audio');
+$('videoBtn').onclick=()=>void quickCall('video');
 $('acceptCall').onclick=async()=>{
  const c=currentCall;if(!c||c.isCaller||callBusy)return;callBusy=true;
  $('acceptCall').hidden=true;callLabel('Menyiapkan kamera/mikrofon…');
@@ -1687,6 +1716,21 @@ async function tick(){
   if(now-lastListUpdate>8000){lastListUpdate=now;await fetchChats()}
  }finally{tickBusy=false}
 }
+// Navigasi bawah ringan: tidak memuat halaman baru atau membuat polling tambahan.
+function tcMarkNav(id){for(const key of ['tcNavChats','tcNavCalls','tcNavSettings']){
+ const b=$(key);if(!b)continue;const yes=key===id;b.classList.toggle('tc-nav-active',yes);
+ if(yes)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
+}}
+$('tcNavChats').onclick=()=>{if($('modal').open)$('modal').close();showList();tcMarkNav('tcNavChats')};
+$('tcNavCalls').onclick=()=>{tcMarkNav('tcNavCalls');void showCallHistory()};
+$('tcNavSettings').onclick=()=>{tcMarkNav('tcNavSettings');$('settingsBtn').click()};
+$('modal').addEventListener('close',()=>tcMarkNav('tcNavChats'));
+$('tcRefreshBtn').onclick=async()=>{
+ const btn=$('tcRefreshBtn');btn.disabled=true;btn.classList.add('tc-refresh-working');
+ try{await fetchChats();if(active)await fetchMessages(true);await checkIncoming();toast('Pesan dan panggilan diperbarui.');}
+ catch(e){toast('Gagal memperbarui: '+e.message)}
+ finally{btn.disabled=false;btn.classList.remove('tc-refresh-working')}
+};
 async function init(){
  updateHeader(null);placeholder('Memeriksa sesi login…');if(innerWidth<=740)showList();
  try{
@@ -1696,7 +1740,7 @@ async function init(){
   if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.5'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.6'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);

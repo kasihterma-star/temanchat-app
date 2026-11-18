@@ -776,3 +776,27 @@ dialog p{color:var(--muted);font-size:13px;line-height:1.6}
  .call-dialog .call-controls{padding-top:9px!important;padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))!important;}
  .call-dialog .call-controls button{min-height:40px;padding:7px 9px;}
 }
+
+/* V9.6 — navigasi bawah yang stabil, tanpa library UI baru */
+#app{position:relative}
+.tc-bottom-nav{position:fixed;z-index:12;display:flex;gap:7px;justify-content:space-around;align-items:center;
+ bottom:12px;left:calc(max(17px,(100vw - min(1420px,100vw - 34px))/2));width:min(365px,33vw);
+ padding:7px;background:color-mix(in srgb,var(--surface,white) 94%,transparent);border:1px solid #dde9e5;
+ border-radius:19px;box-shadow:0 8px 25px #062a211b;backdrop-filter:blur(14px)}
+.tc-bottom-nav button{display:flex;flex:1;gap:3px;flex-direction:column;align-items:center;justify-content:center;
+ border:0;border-radius:13px;background:transparent;color:var(--muted,#718782);padding:7px 2px;min-height:43px;font:inherit;cursor:pointer}
+.tc-bottom-nav button span{font-size:19px;line-height:1.1}.tc-bottom-nav button small{font-size:11px;font-weight:650}
+.tc-bottom-nav button.tc-nav-active{background:#dff4ec;color:#086b57}
+.tc-refresh-button{font-size:25px;line-height:1}.tc-refresh-working{animation:tc-refresh-spin .9s linear infinite}
+@keyframes tc-refresh-spin{to{transform:rotate(360deg)}}
+.tc-about-entry{margin-top:7px}
+@media(min-width:741px){.sidebar .profile{padding-bottom:92px!important}}
+@media(max-width:740px){
+ .tc-bottom-nav{left:0;right:0;bottom:0;width:100%;min-height:calc(62px + env(safe-area-inset-bottom));
+  padding:7px 12px calc(7px + env(safe-area-inset-bottom));border:0;border-top:1px solid #dce8e3;
+  border-radius:17px 17px 0 0;box-shadow:0 -5px 22px #092b2414;background:var(--surface,#fff)}
+ .sidebar .profile{padding-bottom:calc(76px + env(safe-area-inset-bottom))!important}
+ .conversation .compose{padding-bottom:calc(75px + env(safe-area-inset-bottom))!important}
+ .toast{bottom:calc(79px + env(safe-area-inset-bottom))!important}
+ #installBanner.tc-install-banner{bottom:calc(79px + env(safe-area-inset-bottom))!important}
+}
