@@ -1,4 +1,5 @@
-import { pushApi, sendPush } from './push.js';
+import { handleWhatsApp } from './whatsapp.js';
+import { pushApi, sendPush, sendRingingCallPushes } from './push.js';
 import { handleGoogle } from './google-drive.js';
 import { logDeviceLogin, touchDevice, listDevices, revokeDevice, ensureDeviceSchema } from './devices.js';
 // TemanChat V6 terpadu: login, chat, media R2 opsional, sinyal WebRTC.
@@ -177,6 +178,7 @@ export default {
       return reply({ok:Object.values(checks).every(c=>c.ready),checks});
     }
     if(path==='/api/features'&&request.method==='GET')return reply({ok:true,version:'7.4.0',media:!!env.MEDIA,chat:true,calls:true,googleDriveClientConfigured:Boolean(env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET)});
+    if(path.startsWith('/api/wa/'))return handleWhatsApp(request,env,await userSession(request,env));
     if(path==='/api/auth/config'&&request.method==='GET')return reply({siteKey:SITE_KEY,authReady:Boolean(env.DB&&env.RESEND_API_KEY&&env.TURNSTILE_SECRET_KEY)});
     if(path==='/api/auth/me'&&request.method==='GET'){
       const u=await userSession(request,env);if(u)await touchDevice(env,u,request.headers.get('User-Agent'));return u?reply({ok:true,user:publicUser(u,env)}):reply({ok:false},401);
@@ -611,7 +613,7 @@ export default {
     }
     if(path.startsWith('/api/media/')||path.startsWith('/api/calls/')) {
       const me=await userSession(request,env);
-      const extra=await handleExtra(request,env,me,{readJSON,limit,allowOrigin,sendPush:(user,payload,ttl)=>ctx?.waitUntil(sendPush(env,user,payload,ttl))});
+      const extra=await handleExtra(request,env,me,{readJSON,limit,allowOrigin,sendPush:(user,payload,ttl)=>ctx?.waitUntil(sendPush(env,user,payload,ttl)),sendCallAlerts:(user,payload)=>ctx?.waitUntil(sendRingingCallPushes(env,user,payload))});
       if(extra)return extra;
     }
     if(path.startsWith('/api/'))return reply({error:'Endpoint tidak ditemukan'},404);

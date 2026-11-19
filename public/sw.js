@@ -1,6 +1,6 @@
 // V6 tidak pernah cache API, sesi, HTML login, atau foto pribadi.
-const CACHE='temanchat-v90-admin-panel';
-const ASSETS=['/style.css?v=9.0.0','/v6.css?v=9.0.0','/share.js?v=9.0.0','/app.js?v=9.0.0','/storage.js?v=9.0.0','/config.js?v=9.0.0','/auth.css?v=9.0.0','/auth.js?v=9.0.0','/confirm-email.js?v=9.0.0','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
+const CACHE='temanchat-v997-whatsapp-pilot';
+const ASSETS=['/style.css?v=9.9.7','/v6.css?v=9.9.7','/share.js?v=9.9.7','/app.js?v=9.9.7','/wa-panel.js?v=9.9.7','/storage.js?v=9.9.7','/config.js?v=9.9.7','/auth.css?v=9.9.7','/auth.js?v=9.9.7','/confirm-email.js?v=9.9.7','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png','/icons/temanchat-logo.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(async c=>{await Promise.allSettled(ASSETS.map(p=>c.add(p)));}));self.skipWaiting();
 });
@@ -78,12 +78,10 @@ self.addEventListener('push',event=>{
    await tcCloseCallNotification(d.callId);
   }
   if(d.kind==='call'&&typeof d.callId==='string'){
-    // Jangan tampilkan notifikasi panggilan yang sudah diakhiri saat push terlambat sampai.
-    try{const check=await fetch('/api/calls/state?callId='+encodeURIComponent(d.callId),{credentials:'same-origin',cache:'no-store'});
-     if(check.ok){const state=await check.json();if(state.call?.status!=='ringing')return;}
-     else return; // tidak bisa memverifikasi panggilan: hindari notifikasi kedaluwarsa
-    }catch{return}
-
+    // JANGAN menunda notifikasi panggilan untuk memeriksa state melalui jaringan.
+    // Saat HP terkunci, cookie / konektivitas dapat menunda fetch hingga panggilan selesai.
+    // Push ber-TTL pendek; panggilan selesai ditutup oleh event call_end,
+    // dan status tetap diverifikasi saat notifikasi diklik.
     tasks.push(fetch('/api/calls/ringing-ack',{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({callId:d.callId})})
       .then(r=>{if(!r.ok)console.warn('Call ringing acknowledgement',r.status)})
@@ -92,13 +90,15 @@ self.addEventListener('push',event=>{
   if(Number.isFinite(Number(d.unreadCount))&&typeof self.navigator?.setAppBadge==='function'){
    tasks.push(Promise.resolve().then(()=>Number(d.unreadCount)>0?self.navigator.setAppBadge(Number(d.unreadCount)):self.navigator.clearAppBadge()).catch(()=>{}));
   }
-  const notificationMode=await tcModeRead();
+  const notificationMode=await Promise.race([
+   tcModeRead(),new Promise(resolve=>setTimeout(()=>resolve('both'),700))
+  ]);
   tasks.push(self.registration.showNotification(String(d.title||'TemanChat').slice(0,90),{
    body:String(d.body||'Ada aktivitas baru').slice(0,180),icon:'/icons/icon-192.png',
    badge:'/icons/icon-192.png',tag:String(d.tag||'tc-event'),data:{url:safeUrl,kind:d.kind||'',callId:d.callId||''},renotify:true,
    // Jangan pakai silent:true bersama vibrate; kombinasi tersebut tidak valid.
    silent:notificationMode==='silent',
-   ...(['both','vibrate'].includes(notificationMode)?{vibrate:[180,90,180]}:{})
+   ...(['both','vibrate'].includes(notificationMode)?{vibrate:d.kind==='call'?[300,120,300,120,500,200,300]:[180,90,180]}:{})
   }));
   await Promise.allSettled(tasks);
  })());
@@ -118,5 +118,25 @@ self.addEventListener('notificationclick',event=>{
   const existing=windows.find(c=>new URL(c.url).origin===self.location.origin);
   if(existing){await existing.navigate(url);return existing.focus()}
   return clients.openWindow(url);
+ })());
+});
+
+// Best effort: beberapa browser memicu event ini saat subscription push dirotasi.
+// Pada browser lain, app.js juga menyegarkan subscription saat dibuka kembali.
+function tcDecodeVapidKey(text){
+ const pad='='.repeat((4-text.length%4)%4);
+ const bytes=atob((text+pad).replace(/-/g,'+').replace(/_/g,'/'));
+ return Uint8Array.from(bytes,c=>c.charCodeAt(0));
+}
+self.addEventListener('pushsubscriptionchange',event=>{
+ event.waitUntil((async()=>{
+  try{
+   const cfg=await fetch('/api/push/config',{credentials:'include',cache:'no-store'}).then(r=>r.json());
+   if(!cfg?.configured||!cfg.publicKey)return;
+   const sub=event.newSubscription||await self.registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:tcDecodeVapidKey(cfg.publicKey)});
+   if(!sub)return;
+   const res=await fetch('/api/push/subscribe',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({subscription:sub.toJSON()})});
+   if(!res.ok)console.warn('Memperbarui langganan push gagal',res.status);
+  }catch(e){console.warn('Push perlu sinkronisasi saat aplikasi dibuka',e?.message||e)}
  })());
 });

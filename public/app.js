@@ -9,7 +9,40 @@ let replyTarget=null,mediaPrefs={mode:'none',noticeSeen:false},noticeShowing=fal
 let voiceRecorder=null,voiceStream=null,voiceChunks=[],voiceTimer=null,voiceStart=0,voiceElapsed=0;
 let voiceLocked=false,voicePendingStart=false,voicePressing=false,voicePressY=0,voicePressX=0,voiceCancelRequested=false;
 const MAX_VOICE_MS=180000;
-const CALL_MODE_KEY='tc_call_mode_v87';
+const CALL_MODE_KEY='tc_call_mode_v93';
+// Tanggal SQLite dari server selalu UTC; tampilkan waktu lokal pengguna.
+function tcParseAccessDate(value){
+ if(!value)return null;
+ const raw=String(value).trim();
+ const date=new Date(/(?:Z|[+-]\d\d:?\d\d)$/i.test(raw)?raw:raw.replace(' ','T')+'Z');
+ return Number.isFinite(date.getTime())?date:null;
+}
+function tcAccessExpiryText(expiresAt){
+ const date=tcParseAccessDate(expiresAt);
+ if(!expiresAt)return 'Permanen · tidak memiliki tanggal kedaluwarsa';
+ if(!date)return 'Tanggal berakhir belum tersedia';
+ const remaining=date.getTime()-Date.now();
+ const day=Math.floor(remaining/86400000);
+ const hour=Math.floor((remaining%86400000)/3600000);
+ const minute=Math.max(1,Math.ceil(remaining/60000));
+ const rest=remaining<=0?'Sudah kedaluwarsa':day>=1?`Sisa ${day} hari ${hour} jam`:remaining>=3600000?`Sisa ${Math.ceil(remaining/3600000)} jam`:`Sisa ${minute} menit`;
+ return `${rest} · Berakhir ${new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short'}).format(date)}`;
+}
+function tcGrantedDuration(reviewedAt,expiresAt){
+ if(!expiresAt)return 'forever';
+ const start=tcParseAccessDate(reviewedAt),end=tcParseAccessDate(expiresAt);
+ if(!start||!end)return '7d';
+ const days=(end-start)/86400000;
+ return [['1d',1],['7d',7],['30d',30]].reduce((best,item)=>Math.abs(item[1]-days)<Math.abs(best[1]-days)?item:best,['7d',7])[0];
+}
+
+// Jika belum pernah memilih manual, otomatis dipakai begitu admin menyetujui.
+// Pilihan dari versi lama tidak dipaksa ke mode Lokal, agar persetujuan baru langsung berlaku.
+const conversationModeKey=()=>active?.id?CALL_MODE_KEY+'_chat_'+String(active.id):CALL_MODE_KEY;
+const preferredCallMode=approved=>{
+ const saved=(active?.id?localStorage.getItem(conversationModeKey()):null)||localStorage.getItem(CALL_MODE_KEY);
+ return approved?(['auto','local','remote'].includes(saved)?saved:'auto'):'local';
+};
 let remoteCallGranted=false;
 let presenceBusy=false,lastPresenceBeat=0;
 const PRESENCE_PING_MS=45000;
@@ -140,14 +173,31 @@ async function registerPush(){
  updateNotificationFocus(true);
  return true;
 }
-async function checkPush(){
- if(!notificationsEnabled()){serverPushEnabled=false;return}
- try{
-  if(!('serviceWorker' in navigator)||!('PushManager' in window)||Notification.permission!=='granted')return;
-  const reg=await navigator.serviceWorker.getRegistration('/');
-  const sub=await reg?.pushManager.getSubscription();
-  if(sub){await post('/api/push/subscribe',{subscription:sub.toJSON()});serverPushEnabled=true;serverPushEndpoint=sub.endpoint;updateNotificationFocus(true);}
- }catch(e){console.warn('Push registration refresh',e.message)}
+// Segarkan langganan secara diam-diam setelah izin pernah diberikan.
+// Jangan memunculkan prompt izin tanpa interaksi pengguna.
+let lastPushRefresh=0, pushRefreshInFlight=null;
+async function checkPush(force=false){
+ if(!notificationsEnabled()){serverPushEnabled=false;serverPushEndpoint='';return}
+ if(pushRefreshInFlight)return pushRefreshInFlight;
+ if(!force&&Date.now()-lastPushRefresh<60000)return;
+ pushRefreshInFlight=(async()=>{
+  try{
+   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!notifySupported()||Notification.permission!=='granted')return;
+   let reg=await navigator.serviceWorker.getRegistration('/');
+   if(!reg)reg=await navigator.serviceWorker.register('/sw.js');
+   reg=await navigator.serviceWorker.ready;
+   let sub=await reg.pushManager.getSubscription();
+   if(!sub){
+    const cfg=await api('/api/push/config');
+    if(!cfg.configured||!cfg.publicKey)return;
+    sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:fromB64url(cfg.publicKey)});
+   }
+   await post('/api/push/subscribe',{subscription:sub.toJSON()});
+   serverPushEnabled=true;serverPushEndpoint=sub.endpoint;
+   lastPushRefresh=Date.now();updateNotificationFocus(true);
+  }catch(e){console.warn('Push subscription refresh:',e.message)}
+ })();
+ try{await pushRefreshInFlight}finally{pushRefreshInFlight=null}
 }
 const UUID=/^[0-9a-f-]{36}$/;
 function element(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
@@ -821,30 +871,47 @@ mic.onclick=e=>{if(e.detail===0||e.pointerType==='mouse'){
  if(voiceRecorder||voicePendingStart)void voiceFinish(true);else{voicePressing=false;void beginVoiceRecording().then(()=>{if(voiceRecorder){voiceLocked=true;voiceRefreshUI()}});}
 }};
 $('attachBtn').onclick=()=>{if(!mediaEnabled)toast('Untuk mengirim foto, hubungkan Cloudflare R2 lebih dahulu.');else $('attachmentInput').click()};
-function modal(title,text,buttons=[]){$('modalTitle').textContent=title;$('modalDesc').textContent=text;const c=$('modalContent');c.replaceChildren();for(const b of buttons){const btn=element('button','primary',b.label);btn.onclick=b.action;c.append(btn)}$('modal').showModal();}
+function modal(title,text,buttons=[]){const page=/^(Pengaturan TemanChat|Akun Saya|Riwayat panggilan|Tentang TemanChat|Koneksi panggilan|Panel Admin TemanChat)/.test(title);const dlg=$('modal');if(dlg.open)dlg.close();dlg.classList.toggle('tc-page-view',page);$('modalTitle').textContent=title;$('modalDesc').textContent=text;const c=$('modalContent');c.replaceChildren();for(const b of buttons){const btn=element('button','primary',b.label);btn.onclick=b.action;c.append(btn)}if(page){dlg.show();dlg.classList.remove('tc-glass-enter');void dlg.offsetWidth;dlg.classList.add('tc-glass-enter')}else dlg.showModal();}
 $('closeModal').onclick=()=>$('modal').close();
-$('moreBtn').onclick=()=>modal('Percakapan',active?`Percakapan pribadi dengan @${active.other_username}. Pesan teks belum menggunakan enkripsi ujung-ke-ujung.`:'Silakan pilih teman.');
+$('moreBtn').onclick=()=>{if(!active)return toast('Pilih percakapan terlebih dahulu.');void openCallSetup(null);};
 // Riwayat tersimpan di D1, bukan hanya saat browser terbuka.
+let callHistoryRequestId=0;
+// Halaman riwayat tetap dapat dibuka bila hasil API kosong, gagal, atau berasal dari worker lama.
 async function showCallHistory(){
-  modal('Riwayat panggilan','Panggilan masuk, keluar, dan tidak terjawab dari akun ini.');
-  const box=$('modalContent');box.replaceChildren(element('p','tc-hint','Memuat riwayat…'));
+  const requestId=++callHistoryRequestId;
+  modal('Riwayat panggilan','Panggilan suara dan video masuk, keluar, serta tidak terjawab.');
+  const box=$('modalContent');
+  const isCurrent=()=>requestId===callHistoryRequestId&&$('modal').open&&$('modalTitle').textContent==='Riwayat panggilan';
+  box.replaceChildren(element('p','tc-hint','Memuat riwayat…'));
   try{
-    const data=await api('/api/calls/history');box.replaceChildren();
-    if(!data.calls.length){box.append(element('p','tc-hint','Belum ada riwayat panggilan.'));return}
+    const data=await api('/api/calls/history');
+    if(!isCurrent())return;
+    box.replaceChildren();
+    const calls=Array.isArray(data?.calls)?data.calls:[];
+    if(!calls.length){box.append(element('p','tc-hint','Belum ada riwayat panggilan.'));return}
     const list=element('div','tc-call-history');
-    for(const c of data.calls){
+    for(const c of calls){
+      if(!c||typeof c!=='object')continue;
       const item=element('div','tc-call-history-item');
       const symbol=c.direction==='outgoing'?'↗':'↙';
       const missed=c.status==='missed'||c.status==='declined';
-      const status=c.status==='ringing'?'Sedang memanggil':c.status==='missed'?'Tak terjawab':c.status==='declined'?'Ditolak':c.status==='answered'?'Terjawab':'Selesai';
-      const heading=element('div','tc-call-history-person',(missed?'☎ ':'')+symbol+' '+(c.other_name||'Teman'));
+      const statuses={ringing:'Sedang memanggil',missed:'Tak terjawab',declined:'Ditolak',answered:'Terjawab',ended:'Selesai'};
+      const status=statuses[c.status]||'Selesai';
+      const heading=element('div','tc-call-history-person',(missed?'☎ ':'')+symbol+' '+(c.other_name||c.other_username||'Teman'));
       if(missed)heading.classList.add('tc-call-missed');
-      const details=element('small','',`${c.kind==='video'?'Video':'Suara'} · ${status} · ${smallTime(c.created_at)}`);
-      const date=element('small','',String(c.created_at||'').slice(0,10));
+      const rawTime=typeof c.created_at==='string'?c.created_at:'';
+      const details=element('small','',`${c.kind==='video'?'Video':'Suara'} · ${status} · ${smallTime(rawTime)}`);
+      const date=element('small','',rawTime.slice(0,10));
       item.append(heading,details,date);list.append(item);
     }
-    box.append(list);
-  }catch(e){box.replaceChildren(element('p','tc-hint','Riwayat belum bisa dimuat: '+e.message))}
+    box.append(list.childElementCount?list:element('p','tc-hint','Belum ada riwayat panggilan.'));
+  }catch(e){
+    if(!isCurrent())return;
+    box.replaceChildren();
+    box.append(element('p','tc-hint','Riwayat belum bisa dimuat. Periksa koneksi lalu coba lagi.'));
+    const retry=element('button','primary','↻ Coba lagi');retry.type='button';retry.onclick=()=>{void showCallHistory()};box.append(retry);
+    console.warn('Gagal membuka riwayat panggilan:',e);
+  }
 }
 $('callHistoryBtn').onclick=showCallHistory;
 // V9.0 Panel Admin terpisah: daftar dan pencarian izin langsung berbasis server.
@@ -882,15 +949,12 @@ async function openAdminPanel(){
     const title=element('div','tc-admin-user-title');
     title.append(element('b','',person.display_name||person.username),element('small','','@'+person.username));
     const state=element('small','tc-admin-status',states[person.state]||person.state);
-    if(person.state==='approved'&&person.expires_at){
-     const date=new Date(person.expires_at.replace(' ','T')+'Z');
-     const duration=Math.max(0,date.getTime()-Date.now());
-     state.textContent+=' · Sisa '+(duration>=86400000?Math.ceil(duration/86400000)+' hari':Math.ceil(duration/3600000)+' jam');
-    }
-    const duration=element('select');duration.setAttribute('aria-label','Masa berlaku izin '+person.username);
+    if(person.state==='approved')state.textContent+=' · '+tcAccessExpiryText(person.expires_at);
+    const durationLabel=element('small','tc-access-duration-label','Masa berlaku untuk persetujuan berikutnya:');
+    const duration=element('select');duration.setAttribute('aria-label','Masa berlaku izin baru '+person.username);
     for(const [v,label] of [['1d','1 hari'],['7d','7 hari'],['30d','30 hari'],['forever','Tanpa batas waktu']]){
      const opt=element('option','',label);opt.value=v;duration.append(opt);
-    }duration.value='7d';
+    }duration.value=person.state==='approved'?tcGrantedDuration(person.reviewed_at,person.expires_at):'7d';
     const actions=element('div','tc-admin-actions');
     const approve=element('button','tc-admin-approve',person.state==='approved'?'Perpanjang izin':'Beri izin');
     const revoke=element('button','tc-admin-revoke','Cabut / Tolak');
@@ -903,7 +967,7 @@ async function openAdminPanel(){
      try{await post('/api/calls/access/review',{userId:person.user_id,state:value,duration:duration.value});toast('Izin @'+person.username+' berhasil diperbarui.');await refresh()}
      catch(error){toast(error.message);approve.disabled=revoke.disabled=false}
     }
-    actions.append(duration,approve,revoke);item.append(title,state,actions);list.append(item);
+    actions.append(durationLabel,duration,approve,revoke);item.append(title,state,actions);list.append(item);
    }
   }catch(error){if(seq===last)list.replaceChildren(element('small','','Gagal mengambil daftar: '+error.message))}
   finally{reload.disabled=false}
@@ -914,12 +978,26 @@ async function openAdminPanel(){
 }
 if(adminEntry)adminEntry.onclick=()=>void openAdminPanel();
 
+let tcSettingsRequestedPage='settings';
 $('settingsBtn').onclick=()=>{
- modal('Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
+ const tcPage=tcSettingsRequestedPage;tcSettingsRequestedPage='settings';
+ modal(tcPage==='account'?'Akun Saya':'Pengaturan TemanChat',me?`${me.display_name} (@${me.username})`:'');
  if(me?.is_admin)$('modalDesc').append(' ',officialBadge());
  const root=$('modalContent'),wrap=element('div','tc-settings'),label=element('label','','Penyimpanan media penerima');
+ const aboutBtn=element('button','tc-media-action tc-about-entry','ⓘ Tentang TemanChat · Versi 9.9.7');
+ aboutBtn.type='button';aboutBtn.onclick=()=>{
+  modal('Tentang TemanChat V9.9.7','PWA TemanChat untuk pesan, panggilan suara, dan video.');
+  const c=$('modalContent');
+  c.append(element('p','tc-about-paragraph','Panggilan masuk memakai Web Push dan dapat mengirim maksimal empat pengingat selama belum dijawab. Notifikasi bisa dipengaruhi pengaturan izin, baterai, atau kebijakan perangkat.'));
+  c.append(element('p','tc-about-paragraph','Mode Otomatis saat akses disetujui memakai relay TURN seperti Mode Jarak Jauh. Mode Lokal tetap bisa dipilih manual dari Pengaturan.'));
+  c.append(element('p','tc-about-paragraph','iPhone: buka melalui Safari → Bagikan → Tambahkan ke Layar Utama. Browser iPhone tidak menyediakan popup instalasi otomatis seperti Android.'));
+  const refresh=element('button','primary','↻ Muat ulang aplikasi');refresh.type='button';refresh.onclick=()=>location.reload();c.append(refresh);
+ };wrap.append(aboutBtn);
+ const refreshSettings=element('button','tc-media-action','↻ Perbarui aplikasi');refreshSettings.type='button';refreshSettings.onclick=()=>location.reload();wrap.append(refreshSettings);
+ const waButton=element('button','tc-media-action','◉ WhatsApp Terhubung (Percobaan)');waButton.type='button';waButton.onclick=()=>window.TCWhatsApp?.open();wrap.append(waButton);
  const shareSettings=element('button','primary','↗ Bagikan TemanChat');shareSettings.type='button';shareSettings.onclick=()=>{ $('modal').close(); window.TCShare?.open(); };wrap.append(shareSettings);
  // Nama tampilan dapat diganti, username login tidak berubah.
+ const accountHeading=element('h3','tc-my-account-title','Akun Saya');wrap.append(accountHeading);
  const profileTitle=element('label','','Nama panggilan saya');
  const profileInput=element('input');profileInput.type='text';profileInput.maxLength=60;profileInput.minLength=2;
  profileInput.placeholder='Nama yang terlihat oleh teman';profileInput.value=me?.display_name||'';
@@ -1172,28 +1250,29 @@ $('settingsBtn').onclick=()=>{
  refreshDevices.onclick=loadDeviceSessions;
  wrap.append(deviceTitle,deviceHint,refreshDevices,deviceList);
  void loadDeviceSessions();
- // Pengajuan mode jarak jauh diproses server. Pilihan bawaan selalu lokal.
- const callTitle=element('label','','Mode panggilan');
+ // Pilihan Otomatis aktif setelah akses jarak jauh disetujui admin.
+ const callTitle=element('label','','Mode panggilan default');
  const callMode=element('select');
- for(const [v,text] of [['local','Lokal — Wi-Fi / jaringan lokal yang sama'],['remote','Jarak jauh — khusus akun disetujui admin']]){
+ for(const [v,text] of [['auto','Otomatis (disarankan) — utamakan relay TURN saat tersedia'],['local','Lokal — koneksi langsung Wi-Fi / LAN'],['remote','Jarak Jauh — khusus relay TURN bila tersedia']]){
    const opt=element('option','',text);opt.value=v;callMode.append(opt);
  }
- callMode.value=localStorage.getItem(CALL_MODE_KEY)==='remote'?'remote':'local';
+ callMode.value=preferredCallMode(remoteCallGranted);
  const accessText=element('small','','Memeriksa akses jarak jauh…');
  const requestAccess=element('button','primary','Ajukan akses panggilan jarak jauh');
  const adminRequests=element('div','tc-call-admin-requests');
  const refreshCallAccess=async()=>{
    try{
      const d=await api('/api/calls/access');remoteCallGranted=!!d.approved;
-     if(!remoteCallGranted){callMode.value='local';localStorage.setItem(CALL_MODE_KEY,'local');}
+     callMode.value=preferredCallMode(remoteCallGranted);
+     callMode.querySelector('option[value="auto"]').disabled=!d.approved;
      callMode.querySelector('option[value="remote"]').disabled=!d.approved;
-     accessText.textContent=d.admin?'Anda adalah admin panggilan.':d.approved?('Panggilan jarak jauh disetujui'+(d.expiresAt?' hingga '+d.expiresAt+' UTC':' tanpa batas waktu')+'.'):d.state==='pending'?'Pengajuan menunggu persetujuan admin.':d.state==='rejected'?'Izin ditolak atau dicabut.':d.state==='expired'?'Izin sudah kedaluwarsa. Ajukan kembali.':'Mode jarak jauh belum diaktifkan.';
+     accessText.textContent=d.admin?'Anda adalah admin panggilan · izin permanen.':d.approved?('Panggilan jarak jauh disetujui · '+tcAccessExpiryText(d.expiresAt)):d.state==='pending'?'Pengajuan menunggu persetujuan admin.':d.state==='rejected'?'Izin ditolak atau dicabut.':d.state==='expired'?'Izin sudah kedaluwarsa. Ajukan kembali.':'Mode jarak jauh belum diaktifkan.';
      requestAccess.hidden=!!d.approved||d.state==='pending'||!d.adminConfigured;
      if(!d.adminConfigured)accessText.textContent='Admin panggilan belum dikonfigurasi.';
      if(d.admin)await loadCallRequests();
-   }catch(e){remoteCallGranted=false;callMode.value='local';callMode.querySelector('option[value="remote"]').disabled=true;accessText.textContent='Status akses tidak tersedia: '+e.message;}
+   }catch(e){remoteCallGranted=false;callMode.value='local';callMode.querySelector('option[value="auto"]').disabled=true;callMode.querySelector('option[value="remote"]').disabled=true;accessText.textContent='Status akses tidak tersedia: '+e.message;}
  };
- callMode.onchange=()=>{if(callMode.value==='remote'&&!remoteCallGranted){callMode.value='local';return toast('Ajukan dan tunggu persetujuan admin.');}localStorage.setItem(CALL_MODE_KEY,callMode.value);toast('Mode panggilan disimpan pada perangkat ini.');};
+ callMode.onchange=()=>{if(callMode.value!=='local'&&!remoteCallGranted){callMode.value='local';return toast('Ajukan dan tunggu persetujuan admin.');}localStorage.setItem(CALL_MODE_KEY,callMode.value);toast('Preferensi koneksi disimpan.');};
  requestAccess.onclick=async()=>{requestAccess.disabled=true;try{await post('/api/calls/access/request',{});await refreshCallAccess();toast('Pengajuan dikirim kepada admin panggilan.')}catch(e){toast(e.message)}finally{requestAccess.disabled=false}};
  async function loadCallRequests(){
    const d=await api('/api/calls/access/requests');adminRequests.replaceChildren(element('b','','Pengajuan panggilan jarak jauh'));
@@ -1201,14 +1280,14 @@ $('settingsBtn').onclick=()=>{
    for(const r of d.requests){
      const item=element('div','tc-call-access-item');
      const labelState={pending:'Menunggu persetujuan',approved:'Diizinkan',rejected:'Ditolak / Dicabut',expired:'Kedaluwarsa'}[r.state]||r.state;
-     item.append(element('small','',`${r.display_name} (@${r.username}) — ${labelState}${r.state==='approved'&&r.expires_at?' sampai '+r.expires_at+' UTC':''}`));
+     item.append(element('small','',`${r.display_name} (@${r.username}) — ${labelState}${r.state==='approved'?' · '+tcAccessExpiryText(r.expires_at):''}`));
      const durationSelect=element('select');
      for(const [value,label] of [['1d','1 hari'],['7d','7 hari'],['30d','30 hari'],['forever','Tanpa batas waktu']]){
        const opt=element('option','',label);opt.value=value;durationSelect.append(opt);
      }
-     durationSelect.value='7d';
-     durationSelect.setAttribute('aria-label','Masa berlaku izin');
-     item.append(durationSelect);
+     durationSelect.value=r.state==='approved'?tcGrantedDuration(r.reviewed_at,r.expires_at):'7d';
+     durationSelect.setAttribute('aria-label','Masa berlaku izin berikutnya');
+     item.append(element('small','tc-access-duration-label','Masa berlaku untuk persetujuan berikutnya:'),durationSelect);
      for(const [state,label] of [['approved','Setujui / Perpanjang'],['rejected',r.state==='approved'?'Cabut Akses':'Tolak / Cabut']]){
        const btn=element('button','tc-media-action',label);btn.type='button';
        btn.onclick=async()=>{
@@ -1223,7 +1302,7 @@ $('settingsBtn').onclick=()=>{
      adminRequests.append(item);
    }
  }
- wrap.append(callTitle,callMode,accessText,requestAccess,element('small','','Mode lokal tidak menggunakan TURN; panggilan perlu jaringan lokal yang saling terhubung. Mode jarak jauh memerlukan koneksi langsung WebRTC atau relay TURN bila jaringan memblokir koneksi.'),adminRequests);
+ wrap.append(callTitle,callMode,accessText,requestAccess,element('small','','Ini adalah pilihan default. Untuk memilih jaringan khusus seorang teman, buka percakapan lalu ketuk menu tiga titik di kanan atas. Mode Otomatis dan Jarak Jauh membutuhkan izin admin.'),adminRequests);
  void refreshCallAccess();
  const logout=element('button','primary','Keluar dari akun');logout.onclick=async()=>{
    try{
@@ -1235,7 +1314,23 @@ $('settingsBtn').onclick=()=>{
     }catch(e){console.warn('Push logout cleanup',e.message)}
     await post('/api/auth/logout',{});location.replace('/auth.html')
    }catch(e){toast(e.message)}
- };wrap.append(logout);root.append(wrap);
+ };wrap.append(logout);
+ // Keep one shared settings builder, but display only controls belonging to the chosen tab.
+ // This preserves existing account/device handlers without duplicating settings UI or requests.
+ const accountNodes=new Set();
+ let inAccount=false;
+ for(const node of [...wrap.children]){
+   if(node===accountHeading)inAccount=true;
+   if(node===themeTitle)inAccount=false;
+   if(inAccount)accountNodes.add(node);
+ }
+ for(const node of [deviceTitle,deviceHint,refreshDevices,deviceList,logout])accountNodes.add(node);
+ for(const node of [...wrap.children]){
+   node.hidden=tcPage==='account'?!accountNodes.has(node):accountNodes.has(node);
+ }
+ wrap.classList.add('tc-tab-page',tcPage==='account'?'tc-account-page':'tc-settings-page');
+ root.append(wrap);
+
 };
 $('backBtn').onclick=showList;
 window.addEventListener('resize',()=>{if(innerWidth>740){$('sidebar').classList.remove('mobile-visible');$('conversation').classList.remove('mobile-hidden')}else if(active)showChat();else showList()});
@@ -1286,7 +1381,7 @@ async function triggerTemanChatInstall(){
  }
  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent);
  modal('Pasang TemanChat',ios
-  ? 'Buka di Safari, ketuk Bagikan, kemudian Tambahkan ke Layar Utama. Setelah terpasang, buka TemanChat lewat ikonnya.'
+  ? 'Di iPhone, popup instalasi otomatis seperti Android tidak tersedia. Buka TemanChat di Safari → tombol Bagikan (kotak dengan panah ke atas) → Tambahkan ke Layar Utama → Tambah. Sesudah itu buka dari ikon TemanChat, bukan tab Safari.'
   : 'Di browser, buka menu ⋮ lalu pilih Instal aplikasi atau Tambahkan ke layar utama. Jika menu tidak ada, browser mungkin belum mendukung instalasi.');
 }
 $('installBtn').onclick=triggerTemanChatInstall;
@@ -1344,6 +1439,7 @@ function markCallConnected(c){
  if(!c||currentCall!==c)return;
  if(!c.connectedAt){
   c.connectedAt=Date.now();stopCallTone();
+  void showCallPath(c);
   c.durationInterval=setInterval(()=>updateCallDuration(c),1000);
  }
  updateCallDuration(c);
@@ -1354,9 +1450,34 @@ function callLabel(text){
  $('callStatusPill').textContent=text;
  if(/Terhubung|Menghubungkan/.test(text))stopCallTone();
 }
+function setCallModeDisplay(mode,detail){
+ const badge=$('callModeBadge'),hint=$('callModeHint');
+ if(!badge||!hint)return;
+ badge.dataset.mode=mode==='auto'?'auto':mode==='remote'?'remote':mode==='local'?'local':'pending';
+ badge.textContent=mode==='auto'?'Mode Otomatis':mode==='remote'?'Mode Jarak Jauh':mode==='local'?'Mode Lokal':'Memeriksa mode panggilan…';
+ hint.textContent=detail||(mode==='auto'?'TURN jika tersedia, koneksi langsung jika tidak':mode==='remote'?'Menyambungkan lewat relay TURN':mode==='local'?'Perangkat di LAN / Wi-Fi yang saling terhubung':'Mengambil konfigurasi dari server…');
+}
+async function showCallPath(c){
+ if(currentCall!==c||!c.pc||!c.connectedAt)return;
+ try{
+  const stats=await c.pc.getStats();if(currentCall!==c)return;
+  let pair=null;
+  stats.forEach(s=>{if(s.type==='transport'&&s.selectedCandidatePairId)pair=stats.get(s.selectedCandidatePairId)});
+  if(!pair)stats.forEach(s=>{if(s.type==='candidate-pair'&&s.nominated&&s.state==='succeeded')pair=s});
+  const local=pair&&stats.get(pair.localCandidateId);
+  const remote=pair&&stats.get(pair.remoteCandidateId);
+  if(c.mode==='remote'||c.mode==='auto'){
+   if(!pair){setCallModeDisplay(c.mode,'Terhubung · jalur belum dapat dideteksi');return;}
+   const relay=local?.candidateType==='relay'||remote?.candidateType==='relay';
+   const known=!!(local?.candidateType&&remote?.candidateType);
+   setCallModeDisplay(c.mode,!known?'Terhubung · jalur tidak dapat diperiksa':relay?'Terhubung via relay TURN':'Terhubung langsung · tanpa relay TURN');
+  }else if(c.mode==='local')setCallModeDisplay('local','Terhubung melalui jalur langsung');
+ }catch{/* Diagnostik bukan syarat agar panggilan berfungsi. */}
+}
 function showCallUI(kind,name,incoming,username){
  const dlg=$('callDialog');$('callName').textContent=name||'TemanChat';paintAvatar($('callAvatar'),name,username);
  $('callRemote').style.display='flex';$('callAvatar').style.display='grid';$('remoteVideo').style.display='none';$('localVideo').style.display='none';
+ setCallModeDisplay(currentCall?.mode||'pending');
  $('acceptCall').hidden=!incoming;$('cameraCall').hidden=kind!=='video';callLabel(incoming?'Panggilan masuk…':'Memanggil…');
  if(!dlg.open)dlg.showModal();
  if(!currentCall?.isCaller)vibrateForCall();
@@ -1392,14 +1513,27 @@ $('muteCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const tr
 $('cameraCall').onclick=()=>{const c=currentCall;if(!c?.stream)return;for(const track of c.stream.getVideoTracks())track.enabled=!track.enabled;$('cameraCall').querySelector('span').textContent=c.stream.getVideoTracks()[0]?.enabled?'Kamera aktif':'Kamera mati';};
 async function preparePeer(c){
  const opts=await api('/api/calls/config?callId='+encodeURIComponent(c.id));
- const hint=$('callModeHint');if(hint)hint.textContent=opts.mode==='remote'?'Mode jarak jauh: koneksi langsung atau TURN bila tersedia':'Mode lokal: hanya LAN / Wi-Fi yang saling terhubung';
- if(opts.mode==='remote'&&!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'Mode jarak jauh sedang mencoba STUN langsung. Jika gagal, perlu TURN.');
+ c.mode=opts.strategy==='auto'?'auto':opts.mode==='remote'?'remote':'local';
+ if(currentCall===c)setCallModeDisplay(c.mode,c.mode==='auto'?
+   (opts.turnConfigured?'Menghubungkan melalui relay TURN · stabil di Wi-Fi sama atau berbeda':'TURN tidak tersedia · mencoba koneksi langsung'):
+   c.mode==='remote'?(opts.turnConfigured?'Mengutamakan relay TURN · bisa di Wi-Fi yang sama/berbeda':'TURN belum siap · mencoba STUN langsung'):
+   'Menggunakan jalur langsung di Wi-Fi/LAN');
+ if(opts.mode==='remote'&&!opts.turnConfigured&&currentCall===c)toast(opts.turnWarning||'TURN belum tersedia; mencoba sambungan langsung STUN.');
  const constraints=c.kind==='audio'
   ? {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false}
-  : {audio:true,video:true};
+  : {audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:true};
  const stream=await navigator.mediaDevices.getUserMedia(constraints);
  if(currentCall!==c){stream.getTracks().forEach(t=>t.stop());return}
- c.stream=stream;c.pc=new RTCPeerConnection({iceServers:opts.iceServers});
+ // V9.4: Mode Otomatis menggunakan relay TURN ketika siap, termasuk saat satu Wi-Fi.
+ // Ini menghindari jalur host yang tampak tersedia tetapi terhalang isolasi klien/NAT.
+ // Jika TURN tidak tersedia, ICE all masih mengizinkan direct/STUN sebagai alternatif.
+ // Kedua peer membaca strategi yang sama dari server sehingga kebijakan ICE konsisten.
+ c.stream=stream;c.pc=new RTCPeerConnection({
+  iceServers:opts.iceServers,
+  iceTransportPolicy:(c.mode==='remote'||c.mode==='auto')&&opts.turnConfigured?'relay':'all'
+ });
+ c.turnRelayPreferred=c.mode==='remote'&&!!opts.turnConfigured;
+ c.autoNetwork=c.mode==='auto';
  for(const track of stream.getTracks())c.pc.addTrack(track,stream);
  c.pc.ontrack=e=>{
   // Pisahkan elemen audio dan video: pada iPhone suara jangan ikut terhenti saat video disembunyikan.
@@ -1435,7 +1569,7 @@ async function preparePeer(c){
    },VOICE_DISCONNECT_GRACE_MS);
   }else if(['failed','closed'].includes(state)){
    clearVoiceDisconnectTimer(c);
-   toast(opts.turnConfigured?'Koneksi panggilan gagal. Periksa jaringan kedua perangkat.':'Koneksi panggilan gagal. Aktifkan Cloudflare TURN untuk jaringan berbeda.');void hangup();
+   toast(opts.turnConfigured?'Relay TURN gagal tersambung. Periksa koneksi internet kedua perangkat dan izin TURN.':'Panggilan gagal. Periksa Wi-Fi (isolasi klien) atau konfigurasi Cloudflare TURN.');void hangup();
   }
  };
  if(c.kind==='video'){$('localVideo').srcObject=stream;$('localVideo').style.display='block';}
@@ -1471,16 +1605,17 @@ async function pollCall(){
  }catch(e){console.warn('Call polling',e.message)}
  finally{c.pollBusy=false}
 }
-async function startCall(kind){
+async function startCall(kind,selectedMode='auto'){
  try{if(tcAudioContext?.state==='suspended')await tcAudioContext.resume()}catch{}
  if(!active)return toast('Pilih teman terlebih dahulu.');
  if(currentCall)return toast('Masih ada panggilan aktif.');
  if(!Number(active.call_unlocked||0))return toast('Saling bertukar pesan terlebih dahulu untuk memulai panggilan suara atau video.');
  if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)return toast('Browser ini belum mendukung WebRTC atau izin mikrofon/kamera.');
  try{
-  const mode=remoteCallGranted&&localStorage.getItem(CALL_MODE_KEY)==='remote'?'remote':'local';
+  // Server tetap memvalidasi hak pemanggil; tidak bergantung pada status cache browser.
+  const mode=['auto','remote','local'].includes(selectedMode)?selectedMode:'local';
   const d=await post('/api/calls/start',{conversationId:active.id,kind,mode});
-  const c={id:d.callId,kind,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
+  const c={id:d.callId,kind,mode,isCaller:true,lastSignal:0,pending:[],hasRemote:false};currentCall=c;
   // Batasi panggilan tidak terjawab ~30 detik tanpa menunggu cron 1 menit.
   c.timeoutTimer=setTimeout(async()=>{
    if(currentCall!==c||c.connectedAt)return;
@@ -1496,7 +1631,104 @@ async function startCall(kind){
   toast('Panggilan dikirim. Penerima bisa menerima notifikasi push.');
  }catch(e){toast('Panggilan gagal: '+e.message);await hangup()}
 }
-$('voiceBtn').onclick=()=>startCall('audio');$('videoBtn').onclick=()=>startCall('video');
+// V9.2: semua akun (termasuk pengguna biasa) memilih mode SEBELUM menelepon.
+async function openCallSetup(kind){
+ if(currentCall)return toast('Masih ada panggilan aktif.');
+ if(kind){
+  if(!active)return toast('Pilih teman terlebih dahulu.');
+  if(!Number(active.call_unlocked||0))return toast('Saling bertukar pesan terlebih dahulu untuk memulai panggilan.');
+  if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)return toast('Browser belum mendukung panggilan WebRTC.');
+ }
+ if($('modal').open)$('modal').close();
+ modal(kind==='audio'?'Telepon suara':kind==='video'?'Video call':'Koneksi panggilan',
+  kind?'Pilih koneksi untuk menghubungi '+active.other_name+'.':active?'Atur jaringan panggilan khusus percakapan dengan '+active.other_name+'.':'Atur jaringan panggilan dan izin admin.');
+ const root=$('modalContent'),wrap=element('div','tc-call-setup tc-call-setup-v93');
+ const intro=element('div','tc-network-intro');
+ intro.append(element('span','tc-network-icon','◉'),element('div','',kind?'Pilih jalur panggilan':'Koneksi sesuai kebutuhan'));
+ const choice=element('div','tc-call-tiles');
+ const makeTile=(mode,icon,title,description)=>{
+  const b=element('button','tc-call-tile');b.type='button';b.dataset.callChoice=mode;
+  b.append(element('span','tc-call-tile-icon',icon));
+  const words=element('span','tc-call-tile-words');words.append(element('strong','',title),element('small','',description));
+  b.append(words,element('span','tc-call-tile-check','✓'));
+  return b;
+ };
+ const autoTile=makeTile('auto','✦','Otomatis · Disarankan','TURN saat tersedia · kompatibel dengan Wi-Fi yang sama/berbeda');
+ const localTile=makeTile('local','⌂','Jaringan Lokal','Langsung · Wi-Fi/LAN yang saling terhubung');
+ const remoteTile=makeTile('remote','◎','Jarak Jauh','Relay TURN · Wi-Fi yang sama atau berbeda');
+ choice.append(autoTile,localTile,remoteTile);
+ const stateText=element('div','tc-call-setup-state','Memeriksa izin panggilan…');
+ const request=element('button','tc-call-outline','Ajukan izin jarak jauh');request.type='button';request.hidden=true;
+ const refresh=element('button','tc-call-outline','↻ Cek status');refresh.type='button';
+ const actions=element('div','tc-call-setup-actions');actions.append(refresh,request);
+ const foot=element('div','tc-call-setup-footer');
+ const cancel=element('button','tc-call-outline','Kembali');cancel.type='button';cancel.onclick=()=>{$('modal').close()};
+ const go=element('button','primary tc-call-start',kind==='audio'?'Telepon sekarang':'Mulai video call');go.type='button';
+ go.hidden=!kind;foot.append(cancel,go);
+ if(!kind)foot.replaceChildren(cancel);
+ wrap.append(intro,choice,stateText,actions,foot);root.replaceChildren(wrap);
+ let loaded=false,approved=false,selected='local';
+ function choose(mode,save=false){
+  if(mode!=='local'&&!approved)return toast('Mode Otomatis/Jarak Jauh membutuhkan persetujuan admin.');
+  selected=mode;
+  if(save)localStorage.setItem(conversationModeKey(),selected);
+  for(const b of [autoTile,localTile,remoteTile]){
+   const on=b.dataset.callChoice===selected;b.classList.toggle('is-selected',on);
+   b.setAttribute('aria-pressed',String(on));
+  }
+  const label={auto:'Otomatis',remote:'Jarak Jauh',local:'Lokal'}[selected];
+  $('callModeMenuBtn').textContent='☎ Mode panggilan · '+label+' (Atur)';
+ }
+ autoTile.onclick=()=>choose('auto',true);localTile.onclick=()=>choose('local',true);remoteTile.onclick=()=>choose('remote',true);
+ async function loadAccess(){
+  refresh.disabled=true;go.disabled=true;stateText.textContent='Memeriksa izin dan koneksi…';
+  try{
+   const d=await api('/api/calls/access');approved=!!d.approved;remoteCallGranted=approved;loaded=true;
+   autoTile.disabled=!approved;remoteTile.disabled=!approved;
+   autoTile.title=approved?'Otomatis aktif':'Menunggu izin admin';
+   remoteTile.title=approved?'Jarak Jauh tersedia':'Menunggu izin admin';
+   choose(preferredCallMode(approved));
+   if(d.admin)stateText.textContent='Akun admin · Mode Jarak Jauh aktif.';
+   else if(approved)stateText.textContent='✓ Izin disetujui · '+tcAccessExpiryText(d.expiresAt);
+   else if(!d.adminConfigured)stateText.textContent='Admin belum mengaktifkan pengaturan izin. Mode Lokal tersedia.';
+   else if(d.state==='pending')stateText.textContent='⏳ Permintaan sedang menunggu keputusan admin.';
+   else if(d.state==='rejected')stateText.textContent='Izin ditolak/dicabut. Kamu bisa mengajukan kembali.';
+   else if(d.state==='expired')stateText.textContent='Izin berakhir. Ajukan kembali untuk memakai Jarak Jauh.';
+   else stateText.textContent='Jarak Jauh memerlukan persetujuan admin terlebih dahulu.';
+   request.hidden=approved||d.state==='pending'||!d.adminConfigured;
+  }catch(e){approved=false;remoteCallGranted=false;loaded=false;autoTile.disabled=true;remoteTile.disabled=true;choose('local');request.hidden=true;stateText.textContent='Tidak bisa memeriksa izin: '+e.message+'. Coba perbarui.';}
+  finally{refresh.disabled=false;go.disabled=!loaded;}
+ }
+ request.onclick=async()=>{request.disabled=true;try{await post('/api/calls/access/request',{});toast('Permintaan izin dikirim ke admin.');await loadAccess();}catch(e){toast(e.message)}finally{request.disabled=false}};
+ refresh.onclick=loadAccess;
+ go.onclick=async()=>{
+  if(!loaded||(selected!=='local'&&!approved))return toast('Perbarui izin terlebih dahulu.');
+  const mode=selected;go.disabled=true;$('modal').close();await startCall(kind,mode);
+ };
+ await loadAccess();
+}
+$('callModeMenuBtn').onclick=()=>void openCallSetup(null);
+// V9.8: panggilan langsung; menu titik tiga setiap chat menyimpan mode untuk chat tersebut.
+let quickCallBusy=false;
+async function quickCall(kind){
+ if(quickCallBusy||currentCall)return toast('Ada panggilan yang sedang diproses.');
+ if(!active)return toast('Pilih teman terlebih dahulu.');
+ if(!Number(active.call_unlocked||0))return toast('Saling bertukar pesan dahulu untuk memulai panggilan.');
+ quickCallBusy=true;
+ try{
+  const access=await api('/api/calls/access');
+  remoteCallGranted=!!access.approved;
+  const chosen=preferredCallMode(remoteCallGranted);
+  // Jalur yang telah berhasil diuji: AUTO menggunakan jalur REMOTE/TURN;
+  // tetap menampilkan preferensi AUTO dalam menu, tanpa popup sebelum panggilan.
+  // Kirim strategi Otomatis secara utuh: server tetap menggunakan relay TURN
+  // yang sama seperti Jarak Jauh, sementara kedua sisi tahu pilihan aslinya.
+  await startCall(kind,chosen);
+ }catch(e){toast('Gagal memeriksa izin: '+e.message)}
+ finally{quickCallBusy=false}
+}
+$('voiceBtn').onclick=()=>void quickCall('audio');
+$('videoBtn').onclick=()=>void quickCall('video');
 $('acceptCall').onclick=async()=>{
  const c=currentCall;if(!c||c.isCaller||callBusy)return;callBusy=true;
  $('acceptCall').hidden=true;callLabel('Menyiapkan kamera/mikrofon…');
@@ -1506,7 +1738,7 @@ $('acceptCall').onclick=async()=>{
 };
 async function checkIncoming(){
  if(checkingCalls||currentCall||document.hidden||!me)return;checkingCalls=true;
- try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,isCaller:false,lastSignal:0,pending:[],hasRemote:false};startVoiceSignalTimer(currentCall);showCallUI(d.call.kind,d.call.caller_name,true,d.call.caller_username);(notificationsEnabled()&&!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
+ try{const d=await api('/api/calls/incoming');if(d.call&&!currentCall){currentCall={id:d.call.id,kind:d.call.kind,mode:d.call.mode==='auto'?'auto':d.call.mode==='remote'?'remote':'local',isCaller:false,lastSignal:0,pending:[],hasRemote:false};startVoiceSignalTimer(currentCall);showCallUI(d.call.kind,d.call.caller_name,true,d.call.caller_username);(notificationsEnabled()&&!serverPushEnabled&&notifyLocal('Panggilan TemanChat',String(d.call.caller_name||'Teman')+' menelepon Anda', 'call-'+d.call.id));}}
  catch(e){console.warn('Incoming call',e.message)}finally{checkingCalls=false}
 }
 let lastKnownCallId=null,callHistoryReady=false,lastHistoryCheck=0;
@@ -1546,6 +1778,27 @@ async function tick(){
   if(now-lastListUpdate>8000){lastListUpdate=now;await fetchChats()}
  }finally{tickBusy=false}
 }
+// Navigasi bawah V9.9.7: empat halaman glass, tanpa overlay modal untuk tab utama.
+function tcMarkNav(id){for(const key of ['tcNavChats','tcNavCalls','tcNavSettings','tcNavAccount']){
+ const b=$(key);if(!b)continue;const yes=key===id;b.classList.toggle('tc-nav-active',yes);
+ if(yes)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
+}}
+$('tcNavChats').onclick=()=>{++callHistoryRequestId;if($('modal').open)$('modal').close();showList();tcMarkNav('tcNavChats')};
+$('tcNavCalls').onclick=()=>{tcMarkNav('tcNavCalls');void showCallHistory()};
+$('tcNavSettings').onclick=()=>{tcMarkNav('tcNavSettings');tcSettingsRequestedPage='settings';$('settingsBtn').click()};
+$('tcNavAccount').onclick=()=>{tcMarkNav('tcNavAccount');tcSettingsRequestedPage='account';$('settingsBtn').click()};
+// Akses profil kanan atas menuju halaman Akun yang sama, tanpa tombol Pengaturan ganda.
+const tcAccountBtn=$('tcAccountBtn');
+if(tcAccountBtn)tcAccountBtn.onclick=()=>$('tcNavAccount').click();
+const tcAccountProfile=document.querySelector('.sidebar-title .profile');
+if(tcAccountProfile){tcAccountProfile.setAttribute('role','button');tcAccountProfile.setAttribute('tabindex','0');tcAccountProfile.setAttribute('aria-label','Buka Akun Saya');tcAccountProfile.onclick=()=>$('tcNavAccount').click();tcAccountProfile.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('tcNavAccount').click()}};}
+$('modal').addEventListener('close',()=>{if($('modal').open)return; $('modal').classList.remove('tc-page-view','tc-glass-enter');tcMarkNav('tcNavChats'); });
+$('tcRefreshBtn').onclick=async()=>{
+ const btn=$('tcRefreshBtn');btn.disabled=true;btn.classList.add('tc-refresh-working');
+ try{await fetchChats();if(active)await fetchMessages(true);await checkIncoming();toast('Pesan dan panggilan diperbarui.');}
+ catch(e){toast('Gagal memperbarui: '+e.message)}
+ finally{btn.disabled=false;btn.classList.remove('tc-refresh-working')}
+};
 async function init(){
  updateHeader(null);placeholder('Memeriksa sesi login…');if(innerWidth<=740)showList();
  try{
@@ -1555,7 +1808,7 @@ async function init(){
   if(adminEntry)adminEntry.hidden=!me.is_admin;
   syncVerifiedBadges();
   paintAvatar(document.querySelector('.profile .avatar'),me.display_name,me.username);
-  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.0'));
+  $('mode').replaceChildren(element('span','dot'),document.createTextNode(' Pesan aktif · V9.9.7'));
   placeholder('Cari username teman untuk memulai percakapan.');
   // Status Online hanya dari aplikasi terlihat, bukan hanya akun login.
   await heartbeatPresence(true);
@@ -1583,15 +1836,64 @@ async function init(){
 }
 document.addEventListener('visibilitychange',()=>{
  if(document.hidden){leaveNotificationFocus();stopTyping();partnerTyping=false;drawPartnerTyping();}
- else{updateNotificationFocus(true);void heartbeatPresence(true);void fetchChats();if(active){void fetchMessages(true);void refreshPartnerTyping();}}
+ else{void checkPush();updateNotificationFocus(true);void heartbeatPresence(true);void fetchChats();if(active){void fetchMessages(true);void refreshPartnerTyping();}}
 });
 window.addEventListener('blur',leaveNotificationFocus);
 window.addEventListener('focus',()=>updateNotificationFocus(true));
 window.addEventListener('pagehide',leaveNotificationFocus);
 window.addEventListener('focus',()=>{if(Date.now()-lastPresenceBeat>PRESENCE_PING_MS)void heartbeatPresence()});
+// V9.9: update ringan dan aman saat PWA aktif; tidak menginterupsi VC atau draft pesan.
+// Service worker tidak dapat memaksa browser yang tidak dijalankan untuk mengunduh JS baru.
+let tcNewWorkerReady=false, tcLastWorkerCheck=0, tcUpdateTimer=null;
+const tcHadControllerAtLoad=Boolean(navigator.serviceWorker?.controller);
+const tcCanApplyUpdate=()=>!currentCall && !callBusy && !quickCallBusy &&
+ !document.hidden && document.visibilityState==='visible' &&
+ !($('messageInput')?.value||'').trim() && !document.querySelector('.tc-voice-panel:not([hidden])');
+function tcApplyUpdateSafely(){
+ if(!tcNewWorkerReady)return;
+ if(!tcCanApplyUpdate()){
+  if(!tcUpdateTimer)tcUpdateTimer=setTimeout(()=>{tcUpdateTimer=null;tcApplyUpdateSafely()},15000);
+  return;
+ }
+ // Simpan posisi navigasi hanya melalui browser, bukan isi pesan/pribadi.
+ tcNewWorkerReady=false;
+ window.location.reload();
+}
+async function tcCheckForUpdate(force=false){
+ if(!('serviceWorker' in navigator))return;
+ if(!force && Date.now()-tcLastWorkerCheck<10*60*1000)return;
+ tcLastWorkerCheck=Date.now();
+ try{
+  const reg=await navigator.serviceWorker.getRegistration('/');
+  if(!reg)return;
+  if(reg.waiting){tcNewWorkerReady=true;tcApplyUpdateSafely();return;}
+  await reg.update();
+ }catch(e){console.warn('Pemeriksaan pembaruan:',e?.message||e)}
+}
 if('serviceWorker' in navigator){
- window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').then(syncNotificationModeWorker).catch(console.warn));
- navigator.serviceWorker.addEventListener('controllerchange',syncNotificationModeWorker);
+ window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).then(reg=>{
+  syncNotificationModeWorker();
+  reg.addEventListener('updatefound',()=>{
+   const installing=reg.installing;
+   installing?.addEventListener('statechange',()=>{
+    if(installing.state==='installed'&&navigator.serviceWorker.controller){
+     tcNewWorkerReady=true;tcApplyUpdateSafely();
+    }
+   });
+  });
+  void tcCheckForUpdate(true);
+ }).catch(console.warn));
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{
+  syncNotificationModeWorker();
+  // Bila worker baru mengambil alih saat tab masih terbuka, muat ulang saat aman.
+  if(tcHadControllerAtLoad){tcNewWorkerReady=true;tcApplyUpdateSafely()}
+ });
+ document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden){void tcCheckForUpdate();tcApplyUpdateSafely()}
+ });
+ window.addEventListener('focus',()=>{void tcCheckForUpdate();tcApplyUpdateSafely()});
+ // Periksa berkala HANYA ketika aplikasi terlihat; tidak menambah polling server chat.
+ setInterval(()=>{if(!document.hidden)void tcCheckForUpdate()},10*60*1000);
 }
 // V7.9: tidak menambahkan pushState atau intercept popstate. Tombol Kembali
 // bawaan Android tetap milik browser/OS, bukan dipaksa kembali ke daftar chat.

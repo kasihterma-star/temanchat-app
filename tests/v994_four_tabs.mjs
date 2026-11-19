@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';
+const js=fs.readFileSync('public/app.js','utf8');const html=fs.readFileSync('public/index.html','utf8');const css=fs.readFileSync('public/v6.css','utf8');
+assert.match(html,/id="tcNavAccount"/);
+assert.match(js,/tcSettingsRequestedPage='account'/);
+assert.match(js,/accountNodes\.add\(node\)/);
+assert.match(js,/deviceTitle,deviceHint,refreshDevices,deviceList,logout/);
+assert.match(js,/node\.hidden=tcPage==='account'/);
+assert.match(js,/tcNavCalls.*onclick/);
+assert.match(css,/V9\.9\.4 — four-tab/);
+console.log('PASS V9.9.7 four tabs and split settings/account');

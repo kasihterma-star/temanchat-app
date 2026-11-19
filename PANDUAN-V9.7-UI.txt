@@ -1,0 +1,8 @@
+TemanChat V9.7 BETA
+- Pengaturan, Riwayat, Tentang, dan Mode Panggilan tampil sebagai halaman menyatu, bukan popup tengah.
+- Menu tiga titik percakapan memilih Otomatis/Lokal/Jarak Jauh khusus percakapan.
+- Opsi global di Pengaturan tetap dipakai sebagai fallback. Izin admin tetap diperlukan.
+- Panggilan langsung, TURN, pesan dan push tidak diubah.
+- Tema mengikuti token CSS pada mode terang/gelap/sistem.
+- Instal: unggah isi folder ke repository, deploy lalu refresh seluruh perangkat.
+- Uji tampilan pada HP/iPhone dan desktop sebelum menganggap stabil.

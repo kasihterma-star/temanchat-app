@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const app=fs.readFileSync('public/app.js','utf8');
+const css=fs.readFileSync('public/v6.css','utf8');
+const html=fs.readFileSync('public/index.html','utf8');
+assert.match(app,/conversationModeKey=\(\)=>active\?\.id/);
+assert.match(app,/localStorage\.setItem\(conversationModeKey\(\),selected\)/);
+assert.match(app,/\$\('moreBtn'\)\.onclick=\(\)=>\{if\(!active\)/);
+assert.match(app,/dlg\.show\(\)/);
+assert.match(css,/#modal\.tc-page-view\[open\]/);
+assert.match(css, /var\(--accent-soft\)/);
+assert.match(html,/v=9\.9\.7/);
+console.log('PASS V9.7 adaptive pages, theme variables, conversation network preferences');

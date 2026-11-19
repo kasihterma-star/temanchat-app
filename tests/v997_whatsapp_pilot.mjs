@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';
+const src=fs.readFileSync('src/whatsapp.js','utf8');
+const frontend=fs.readFileSync('public/wa-panel.js','utf8');
+const index=fs.readFileSync('src/index.js','utf8');
+const html=fs.readFileSync('public/index.html','utf8');
+const sw=fs.readFileSync('public/sw.js','utf8');
+assert.match(index,/path\.startsWith\('\/api\/wa\/'\)/);
+assert.match(src,/WA_APP_SECRET/);assert.match(src,/x-hub-signature-256/);assert.match(src,/crypto\.subtle\.verify|crypto\.subtle\.sign/);
+assert.match(src,/WA_TEST_RECIPIENTS/);assert.match(src,/TC_CALL_ADMIN_EMAIL/);
+assert.match(src,/tc_wa_permissions/);assert.match(src,/tc_wa_messages/);
+assert.match(src,/api\/wa\/test-template/);assert.match(src,/hello_world/);
+assert.match(src,/24 hours/);assert.match(frontend,/Kelola izin pengguna/);assert.match(frontend,/Kirim template tes via Meta/);
+assert.match(html,/wa-panel\.js\?v=9\.9\.7/);assert.match(sw,/wa-panel\.js\?v=9\.9\.7/);
+console.log('PASS V9.9.7 WhatsApp Cloud API pilot safeguards and frontend wiring');

@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const js=fs.readFileSync('public/app.js','utf8');
+const css=fs.readFileSync('public/v6.css','utf8');
+const sw=fs.readFileSync('public/sw.js','utf8');
+assert(js.includes("iceTransportPolicy:(c.mode==='remote'||c.mode==='auto')&&opts.turnConfigured?'relay':'all'"),'auto and remote must use same relay policy when ready');
+assert(js.includes("opts.strategy==='auto'"),'receiver shares call strategy from server');
+assert(css.includes('.call-dialog .call-remote{') && css.includes('position:absolute!important'),'avatar center uses stable overlay');
+assert(css.includes('.call-dialog .call-controls{'),'controls use stable overlay');
+assert(css.includes('button[hidden]{display:none!important;}'),'hidden call buttons do not consume space');
+assert(sw.includes('temanchat-v997-whatsapp-pilot'));
+console.log('PASS V9.4: automatic TURN, shared call strategy, fixed mobile/desktop overlay, cache');

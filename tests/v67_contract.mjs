@@ -16,7 +16,7 @@ assert(css.includes('backdrop-filter:blur'));
 const events=new Map(),requests=[];let notices=0,badges=[];
 const self={registration:{showNotification:async()=>{notices++}},navigator:{setAppBadge:async n=>badges.push(n),clearAppBadge:async()=>badges.push(0)},clients:{claim(){}} ,addEventListener:(n,cb)=>events.set(n,cb)};
 const context={self,location:{origin:'https://chat.ege.my.id'},URL,console,JSON,Promise,Number,String,
- caches:{},fetch:async(url,opts)=>{requests.push({url,opts});return{ok:true,status:200}}};
+ setTimeout,caches:{},fetch:async(url,opts)=>{requests.push({url,opts});return{ok:true,status:200}}};
 vm.runInNewContext(sw,context);
 const waits=[];
 events.get('push')({data:{json(){return{kind:'message',conversationId:'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',messageId:42,unreadCount:3,url:'/?chat=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',title:'TemanChat'}}},waitUntil(p){waits.push(p)}});

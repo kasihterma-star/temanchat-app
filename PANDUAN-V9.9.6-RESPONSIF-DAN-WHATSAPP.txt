@@ -1,0 +1,19 @@
+TemanChat V9.9.6 BETA — Perbaikan responsif dan persiapan WhatsApp
+
+PERBAIKAN APLIKASI
+- Pengaturan dan Akun: konten panjang, alamat email, input, dan tombol dibatasi agar tidak meluber pada layar kecil.
+- Area Pengaturan dapat digulir sendiri di HP, dengan tempat aman untuk navigasi bawah.
+- Ukuran tablet dan desktop kecil diberi batas lebar supaya panel tidak terpotong.
+- Scroll chat dan daftar percakapan tetap dipertahankan dari V9.9.5.
+- Tidak mengubah database D1, koneksi WebRTC/TURN, push, dan izin admin.
+
+STATUS WHATSAPP
+- Bagikan tautan TemanChat ke WhatsApp sudah tersedia di kode lama (public/share.js).
+- Pengiriman notifikasi WA otomatis BELUM dipasang/diaktifkan karena harus memilih tujuan integrasi dan menggunakan kredensial resmi.
+- Untuk pemberitahuan via WhatsApp Business Platform Cloud API: perlu Meta business portfolio, WABA/nomor bisnis, phone_number_id, system user access token, dan template yang disetujui sesuai jenis pesan.
+- Nomor penerima harus bersedia menerima notifikasi (opt-in); jangan gunakan token di frontend atau mengirimkan rahasia melalui chat.
+- Simpan token di Cloudflare Worker Secrets; terapkan batas laju, pencatatan kegagalan, opt-out, dan jangan kirim isi chat privat via WA tanpa persetujuan eksplisit.
+- Bisa juga memilih integrasi ringan hanya tombol share/chat WhatsApp biasa, tanpa Cloud API.
+
+INSTALASI
+Upload isi folder temanchat-app-main ke repository GitHub yang telah terhubung ke Cloudflare Worker lalu tunggu status Ready. Jangan hapus D1 atau secrets yang sudah bekerja.

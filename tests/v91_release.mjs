@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const load = path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+const js=load('public/app.js'),html=load('public/index.html'),sw=load('public/sw.js');
+assert.match(js,/Pesan aktif · V9\.9/);
+assert.doesNotMatch(js,/Pesan aktif · V9\.0/);
+assert.match(html,/app\.js\?v=9\.9\.7/);
+assert.match(sw,/temanchat-v997-whatsapp-pilot/);
+assert.match(sw,/app\.js\?v=9\.9\.7/);
+assert.match(js,/Mode Jarak Jauh|mode jarak jauh/i);
+console.log('PASS V9.3: label, static assets, service worker dan mode panggilan');

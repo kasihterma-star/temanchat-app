@@ -72,6 +72,10 @@ export function ensureExtras(env) {
       `CREATE TABLE IF NOT EXISTS tc_call_modes (
         call_id TEXT PRIMARY KEY, mode TEXT NOT NULL CHECK(mode IN ('local','remote')),
         FOREIGN KEY(call_id) REFERENCES tc_call_sessions(id) ON DELETE CASCADE
+      )`,
+      `CREATE TABLE IF NOT EXISTS tc_call_auto_strategies (
+        call_id TEXT PRIMARY KEY,
+        FOREIGN KEY(call_id) REFERENCES tc_call_sessions(id) ON DELETE CASCADE
       )`
     ];
     for (const sql of ddl) await env.DB.prepare(sql).run();
@@ -293,7 +297,7 @@ export async function handleExtra(request, env, me, deps){
   const result=await env.DB.prepare(`SELECT usr.id AS user_id,usr.username,usr.display_name,
     CASE WHEN access.state='approved' AND access.expires_at IS NOT NULL AND access.expires_at<=datetime('now') THEN 'expired'
          ELSE COALESCE(access.state,'none') END AS state,
-    access.expires_at,access.requested_at
+    access.expires_at,access.requested_at,access.reviewed_at
     FROM users usr LEFT JOIN tc_remote_call_access access ON access.user_id=usr.id
     WHERE usr.id<>? AND (?='' OR instr(lower(usr.username),lower(?))>0 OR instr(lower(usr.display_name),lower(?))>0)
     ORDER BY CASE WHEN access.state='pending' THEN 0 WHEN access.state='approved' THEN 1 ELSE 2 END,
@@ -351,14 +355,16 @@ export async function handleExtra(request, env, me, deps){
   if(!call)return bad('Panggilan tidak ditemukan untuk sesi ini.',404);
   const modeRow=await env.DB.prepare('SELECT mode FROM tc_call_modes WHERE call_id=?').bind(call.id).first();
   const callMode=modeRow?.mode||'local';
-  if(callMode==='local')return res({ok:true,mode:'local',iceServers:[],turnConfigured:false,turnWarning:''});
+  const autoRow=callMode==='remote'?await env.DB.prepare('SELECT call_id FROM tc_call_auto_strategies WHERE call_id=?').bind(call.id).first():null;
+  const strategy=autoRow?'auto':callMode;
+  if(callMode==='local')return res({ok:true,mode:'local',strategy:'local',iceServers:[],turnConfigured:false,turnWarning:''});
   if(call.status!=='ringing'&&call.status!=='answered')return bad('Panggilan sudah selesai.',409);
 
   const fallback=[{urls:['stun:stun.cloudflare.com:3478','stun:stun.l.google.com:19302']}];
   // Cloudflare Realtime TURN: secret jangka panjang hanya ada di Worker.
   // Browser menerima kredensial sementara untuk satu sesi panggilan.
   if(!env.CF_TURN_KEY_ID||!env.CF_TURN_API_TOKEN)
-    return res({ok:true,iceServers:fallback,turnConfigured:false,turnWarning:'TURN belum diaktifkan. Panggilan pada jaringan berbeda mungkin gagal.'});
+    return res({ok:true,mode:'remote',strategy,iceServers:fallback,turnConfigured:false,turnStatus:'not_configured',turnWarning:'Cloudflare TURN belum aktif. Panggilan akan mencoba koneksi langsung menggunakan STUN.'});
   try{
     if(!/^[a-zA-Z0-9_-]{8,128}$/.test(env.CF_TURN_KEY_ID))throw Error('TURN key ID tidak valid');
     const response=await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(env.CF_TURN_KEY_ID)}/credentials/generate-ice-servers`,{
@@ -368,22 +374,33 @@ export async function handleExtra(request, env, me, deps){
     if(!response.ok)throw Error('TURN provider HTTP '+response.status);
     const data=await response.json();
     // Jangan terima URL lain dari response yang tidak sesuai dengan TURN Cloudflare.
-    const iceServers=Array.isArray(data.iceServers)?data.iceServers.filter(x=>x&&Array.isArray(x.urls)).map(x=>({
-      urls:x.urls.filter(u=>typeof u==='string'&&/^(stun:stun\.cloudflare\.com:3478|turns?:turn\.cloudflare\.com:(?:3478|443|80|5349)(?:\?transport=(?:tcp|udp))?)$/.test(u)),
-      ...(typeof x.username==='string'&&typeof x.credential==='string'?{username:x.username,credential:x.credential}:{})
-    })).filter(x=>x.urls.length):[];
+    // Izinkan hanya alamat resmi Cloudflare; jangan meneruskan URL tak dikenal.
+    const allowed=/^(?:stun:stun\.cloudflare\.com:3478|turn:turn\.cloudflare\.com:(?:3478|443|80)(?:\?transport=(?:tcp|udp))?|turns:turn\.cloudflare\.com:(?:5349|443)(?:\?transport=tcp)?)$/;
+    const iceServers=Array.isArray(data.iceServers)?data.iceServers.map(x=>{
+      if(!x||typeof x!=='object')return null;
+      const candidates=Array.isArray(x.urls)?x.urls:typeof x.urls==='string'?[x.urls]:[];
+      const urls=candidates.filter(u=>typeof u==='string'&&allowed.test(u));
+      if(!urls.length)return null;
+      if(urls.some(u=>u.startsWith('turn'))){
+        if(typeof x.username!=='string'||!x.username||typeof x.credential!=='string'||!x.credential)return null;
+        return {urls,username:x.username,credential:x.credential};
+      }
+      return {urls};
+    }).filter(Boolean):[];
     if(!iceServers.some(x=>x.username&&x.credential&&x.urls.some(u=>u.startsWith('turn'))))throw Error('Provider tidak mengembalikan kredensial TURN');
-    return res({ok:true,iceServers,turnConfigured:true});
+    return res({ok:true,mode:'remote',strategy,iceServers,turnConfigured:true,turnStatus:'ready'});
   }catch(error){
     console.warn('TURN setup',error?.message||'unknown');
-    return res({ok:true,iceServers:fallback,turnConfigured:false,turnWarning:'Server relay TURN sementara tidak tersedia. Coba kembali atau periksa Secret TURN.'});
+    return res({ok:true,mode:'remote',strategy,iceServers:fallback,turnConfigured:false,turnStatus:'unavailable',turnWarning:'Relay TURN belum dapat dihubungi. Periksa CF_TURN_KEY_ID dan CF_TURN_API_TOKEN di Cloudflare; saat ini mencoba STUN langsung.'});
   }
  }
  if(p==='/api/calls/start'&&request.method==='POST'){
   const d=await deps.readJSON(request),chat=await member(env,trimmed(d.conversationId),me.id),kind=trimmed(d.kind);
-  const mode=d.mode==='remote'?'remote':'local';
-  if(d.mode!==undefined&&!['remote','local'].includes(d.mode))return bad('Mode panggilan tidak valid.');
-  if(mode==='remote'&&!await remoteApproved(env,me))return bad('Mode jarak jauh harus disetujui admin terlebih dahulu.',403);
+  // Otomatis diotorisasi sama seperti Jarak Jauh; tidak melewati persetujuan admin.
+  const strategy=['local','remote','auto'].includes(d.mode)?d.mode:'local';
+  if(d.mode!==undefined&&!['remote','local','auto'].includes(d.mode))return bad('Mode panggilan tidak valid.');
+  const mode=strategy==='local'?'local':'remote';
+  if(mode==='remote'&&!await remoteApproved(env,me))return bad('Mode otomatis/jarak jauh harus disetujui admin terlebih dahulu.',403);
   if(!chat||!['audio','video'].includes(kind))return bad('Percakapan atau jenis panggilan tidak valid.');
   const callee=chat.user_a===me.id?chat.user_b:chat.user_a;
   // Perlindungan panggilan pertama: harus pernah saling mengirim pesan (dua arah).
@@ -399,12 +416,18 @@ export async function handleExtra(request, env, me, deps){
   const id=crypto.randomUUID();
   await env.DB.prepare('INSERT INTO tc_call_sessions(id,chat_id,caller_id,callee_id,kind) VALUES(?,?,?,?,?)').bind(id,chat.id,me.id,callee,kind).run();
   await env.DB.prepare('INSERT INTO tc_call_modes(call_id,mode) VALUES(?,?)').bind(id,mode).run();
-  deps.sendPush?.(callee,{title:'Panggilan TemanChat',body:me.display_name+' menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id},45);
+  if(strategy==='auto')await env.DB.prepare('INSERT INTO tc_call_auto_strategies(call_id) VALUES(?)').bind(id).run();
+  const callAlert={title:kind==='video'?'📹 Panggilan video TemanChat':'📞 Panggilan suara TemanChat',body:me.display_name+' sedang menelepon Anda',url:'/?call='+id,kind:'call',callId:id,tag:'tc-call-'+id};
+  if(deps.sendCallAlerts)deps.sendCallAlerts(callee,callAlert);
+  else deps.sendPush?.(callee,callAlert,45);
   return res({ok:true,callId:id});
  }
  if(p==='/api/calls/incoming'&&request.method==='GET'){
-  const r=await env.DB.prepare(`SELECT c.id,c.chat_id,c.kind,u.display_name AS caller_name,u.username AS caller_username
+  const r=await env.DB.prepare(`SELECT c.id,c.chat_id,c.kind,CASE WHEN a.call_id IS NOT NULL THEN 'auto' ELSE COALESCE(m.mode,'local') END AS mode,
+      u.display_name AS caller_name,u.username AS caller_username
     FROM tc_call_sessions c JOIN users u ON u.id=c.caller_id
+    LEFT JOIN tc_call_modes m ON m.call_id=c.id
+    LEFT JOIN tc_call_auto_strategies a ON a.call_id=c.id
     WHERE c.callee_id=? AND c.status='ringing' AND c.created_at>datetime('now','-30 seconds')
     ORDER BY c.created_at DESC LIMIT 1`).bind(me.id).first();
   if(r){
